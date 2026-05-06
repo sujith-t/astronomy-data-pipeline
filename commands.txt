@@ -3,3 +3,4 @@ sudo dnf install python -y
 sudo dnf install git -y
 sudo yum install python3-pip -y
 python -m venv .venv
+git clone https://github.com/sujith-t/astronomy-data-pipeline.git
