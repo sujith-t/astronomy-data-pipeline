@@ -1,3 +1,4 @@
 sudo dnf update
 sudo dnf install python -y
 sudo dnf install git -y
+sudo yum install python3-pip -y
