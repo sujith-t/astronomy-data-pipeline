@@ -1,0 +1,3 @@
+sudo dnf upgrade --refresh
+sudo dnf install python3.12 -y
+sudo dnf install git -y
