@@ -1,5 +1,5 @@
 import mysql.connector
-
+#https://drive.google.com/file/d/1C04AoVqiCg_yeBy9qQ3PQPr4HdomyO3c/view?usp=sharing
 #from dotenv import load_dotenv
 
 #load_dotenv("../../.env")
