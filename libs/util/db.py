@@ -1,8 +1,12 @@
-import mysql.connector
-#https://drive.google.com/file/d/1C04AoVqiCg_yeBy9qQ3PQPr4HdomyO3c/view?usp=sharing
-#from dotenv import load_dotenv
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on May  13 18:30:21 2026
 
-#load_dotenv("../../.env")
+@author: sujith-t
+"""
+
+import mysql.connector
 
 class MySQLUtil:
 
@@ -33,7 +37,7 @@ class MySQLUtil:
             cursor.close()
 
     def fetch_all(self, sql:str, params=None):
-        cursor = DbUtil.connection.cursor()
+        cursor = MySQLUtil.connection.cursor()
         if params is None:
             cursor.execute(sql)
         else:

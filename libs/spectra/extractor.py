@@ -13,8 +13,6 @@ from numpy.polynomial.polynomial import Polynomial
 from scipy.optimize import curve_fit
 from astropy.cosmology import Planck18 as cosmo
 
-file_location = "/var/project/astronomy-data-pipeline/scripts/galaxy_spectrum.fits"
-
 
 class SpectralProfiler:
 
@@ -51,16 +49,20 @@ class SpectralProfiler:
         x = w[mask]
         y = f[mask]
 
+        # local continuum = np.median(y)
+        y = y - np.median(y)
+
         if len(x) < 5:
             return None
 
         # Initial guesses
-        amp_guess = np.max(y)
+        amp_guess = max(np.max(y), 1e-3)
         mu_guess = center
         sigma_guess = 2
 
         try:
-            popt, _ = curve_fit(__gaussian__, x, y, p0=[amp_guess, mu_guess, sigma_guess])
+            popt, _ = curve_fit(__gaussian__, x, y, p0=[amp_guess, mu_guess, sigma_guess],
+                                bounds=([0, center - 3, 0.5], [np.inf, center + 3, 10]))
             amp, mu, sigma = popt
 
             # Flux = area under Gaussian
@@ -244,20 +246,16 @@ class SpectralProfiler:
         log_CH = log_CO + log_OH
         ratios["carbon"] = 10 ** log_CH
 
-        ##### 4. SULFER #####
-        log_sulpher_hbeta = np.log10((corrected["S2_6716"] + corrected["S2_6731"]) / corrected["H_Beta"])
-
-        # oxygen ionization rato estimating: ICF(S) ≈ O/O+
-        oxygen_ratio = total_oxygen / corrected["O2_3727"]
-        log_SH = log_sulpher_hbeta + np.log10(oxygen_ratio)
-        ratios["sulpher"] = 10 ** log_SH
+        ##### 4. SULPHUR #####
+        sulphur_oxygen_ratio = 0.025
+        ratios["sulphur"] = ratios["oxygen"] * sulphur_oxygen_ratio
 
         ##### 5. stimate NEON #####
         log_NeO = np.log10(corrected["Ne_3869"] / (corrected["O3_5007"] + corrected["O3_4959"])) + 0.7
         log_NeH = log_NeO + log_OH
         ratios["neon"] = 10 ** log_NeH
 
-        ##### 6. Iron (Fe) ##### this can't be intepretted as ratio Fe/H
+        ##### 6. Iron (Fe) ##### this can't be interpreted as ratio Fe/H
         ratios["iron_strength"] = self.detect_approximate_iron(file_path)
 
         return ratios
