@@ -58,7 +58,7 @@ class MySQLUtil:
         cursor.close()
         return row
 
-    def __close__(self):
+    def close(self):
         if MySQLUtil.connection is not None:
             MySQLUtil.connection.close()
             MySQLUtil.connection = None
