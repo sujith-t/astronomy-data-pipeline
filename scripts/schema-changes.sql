@@ -16,8 +16,22 @@ CREATE TABLE galaxy_spectra_flux (
     n2_6548 DOUBLE DEFAULT NULL,
     s2_6716 DOUBLE DEFAULT NULL,
     s2_6731 DOUBLE DEFAULT NULL,
-    he_3869 DOUBLE DEFAULT NULL,
+    ne_3869 DOUBLE DEFAULT NULL,
     he_4686 DOUBLE DEFAULT NULL,
     fe_5200 DOUBLE DEFAULT NULL,
+    PRIMARY KEY (`obj_id`)
+);
+
+CREATE TABLE metallicity_profile (
+    obj_id VARCHAR(20) NOT NULL,
+    o3n2_metallicity DOUBLE DEFAULT NULL,
+    r23_metallicity DOUBLE DEFAULT NULL,
+    final_metallicity DOUBLE DEFAULT NULL,
+    oxygen_hydrogen_ratio DOUBLE DEFAULT NULL,
+    nitrogen_hydrogen_ratio DOUBLE DEFAULT NULL,
+    carbon_hydrogen_ratio DOUBLE DEFAULT NULL,
+    sulphur_hydrogen_ratio DOUBLE DEFAULT NULL,
+    neon_hydrogen_ratio DOUBLE DEFAULT NULL,
+    iron_strength_index DOUBLE DEFAULT NULL,
     PRIMARY KEY (`obj_id`)
 );
