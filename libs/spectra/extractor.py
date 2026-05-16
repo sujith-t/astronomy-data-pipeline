@@ -129,7 +129,7 @@ class SpectralProfiler:
 
 
     # using Kennicutt relation to find star formation rate FR(M⊙​/yr)=7.9×10−42×LHα​(erg/s)
-    def star_formation_rate(self, file_path: str):
+    def star_formation_rate(self, file_path: str) -> float:
         # read the file
         hdul = fits.open(file_path)
 
@@ -149,12 +149,12 @@ class SpectralProfiler:
         z = hdul[2].data['Z'][0]
 
         # Convert redshift → distance Luminosity distance in cm
-        luminocity_distance = cosmo.luminosity_distance(z).to('cm').value
+        luminosity_distance = cosmo.luminosity_distance(z).to('cm').value
 
-        # flu -> luminocity L=4πdL2​×F
-        luminocity_h_alpha = 4 * np.pi * luminocity_distance ** 2 * h_alpha_flux
+        # flu -> luminosity L=4πdL2​×F
+        luminosity_h_alpha = 4 * np.pi * luminosity_distance ** 2 * h_alpha_flux
 
-        return 7.9e-42 * luminocity_h_alpha
+        return 7.9e-42 * luminosity_h_alpha
 
 
     # remove dust effects
