@@ -53,7 +53,7 @@ class SpectralProfiler:
         y = y - np.median(y)
 
         if len(x) < 5:
-            return None
+            return 0
 
         # Initial guesses
         amp_guess = max(np.max(y), 1e-3)
@@ -70,7 +70,7 @@ class SpectralProfiler:
 
             return flux_line
         except:
-            return None
+            return 0
 
 
     def find_rest_wavelength(self, file_path: str):
@@ -134,6 +134,9 @@ class SpectralProfiler:
         hdul = fits.open(file_path)
 
         result = self.detect_emission_flux(file_path)
+
+        if result["H_Alpha"] == 0 or result["H_Beta"]:
+            return 0
 
         observed_ratio = result["H_Alpha"] / result["H_Beta"]
         intrinsic_ratio = 2.86
@@ -213,10 +216,14 @@ class SpectralProfiler:
         ##### 1. OXYGEN and Matalicity #####
         # compute R23
         total_oxygen = corrected["O3_5007"] + corrected["O3_4959"] + corrected["O2_3727"]
-        oxygen_R23 = total_oxygen / corrected["H_Beta"]
+        oxygen_R23 = 0
+        if total_oxygen != 0 and  corrected["H_Beta"] != 0:
+            oxygen_R23 = total_oxygen / corrected["H_Beta"]
 
         # compute O3N2 | metallicity_O3N2 > 8.4 = high otherwise low
-        o3n2 = np.log10((corrected["O3_5007"] / corrected["H_Beta"]) / (corrected["N2_6584"] / corrected["H_Alpha"]))
+        o3n2 = 0
+        if corrected["H_Beta"] > 0 and corrected["H_Alpha"] > 0:
+            o3n2 = np.log10((corrected["O3_5007"] / corrected["H_Beta"]) / (corrected["N2_6584"] / corrected["H_Alpha"]))
         ratios["metallicity_O3N2"] = 8.73 - 0.32 * o3n2
 
         ratios["metallicity_R23"] = 7.5 + 0.8 * np.log10(oxygen_R23)
@@ -233,7 +240,9 @@ class SpectralProfiler:
 
         ##### 2. NITROGEN #####
         # calculate log(N/O) ratio and add a calibration offset of 0.05
-        log_NO = np.log10(corrected["N2_6584"] / corrected["O2_3727"]) + 0.05
+        log_NO = 0.05
+        if corrected["O2_3727"] > 0:
+            log_NO = np.log10(corrected["N2_6584"] / corrected["O2_3727"]) + log_NO
 
         # log(N/H) = log(N/O)+log(O/H)
         log_NH = log_NO + log_OH
@@ -251,7 +260,10 @@ class SpectralProfiler:
         ratios["sulphur"] = ratios["oxygen"] * sulphur_oxygen_ratio
 
         ##### 5. stimate NEON #####
-        log_NeO = np.log10(corrected["Ne_3869"] / (corrected["O3_5007"] + corrected["O3_4959"])) + 0.7
+        log_NeO =  0.7
+        if corrected["O3_5007"] != 0 or corrected["O3_4959"]:
+            log_NeO = np.log10(corrected["Ne_3869"] / (corrected["O3_5007"] + corrected["O3_4959"])) + log_NeO
+
         log_NeH = log_NeO + log_OH
         ratios["neon"] = 10 ** log_NeH
 

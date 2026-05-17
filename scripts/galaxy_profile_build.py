@@ -22,7 +22,7 @@ def build_galaxy_profile(start_position=0, no_records=50000):
     db_util = MySQLUtil(os)
     profiler = SpectralProfiler()
 
-    q = "SELECT obj_id, ra, declination FROM galaxy_catalog WHERE plate_id IS NULL AND mjd IS NULL AND fiber_id IS NULL LIMIT %s, %s"
+    q = "SELECT obj_id, ra, declination FROM galaxy_catalog WHERE plate_id IS NULL LIMIT %s, %s"
     rows = db_util.fetch_all(q, [start_position, no_records])
 
     for id, ra, dec in rows:
@@ -78,4 +78,4 @@ def build_galaxy_profile(start_position=0, no_records=50000):
 
 
 # now invoke
-build_galaxy_profile(no_records=5)
+build_galaxy_profile(no_records=10000)
