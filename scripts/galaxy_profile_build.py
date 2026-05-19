@@ -27,9 +27,18 @@ def build_galaxy_profile(start_position=0, no_records=50000):
 
     for id, ra, dec in rows:
         pos = coords.SkyCoord(ra, dec, unit="deg")
-
+        print(id, " started")
         # Query spectroscopy (DR17)
-        spec = SDSS.query_region(pos, radius=2*u.arcsec, spectro=True)
+        spec = SDSS.query_region(pos, radius=2*u.arcsec, spectro=True, data_release=19)
+        if spec is None:
+            q = "UPDATE galaxy_catalog SET plate_id = %s WHERE obj_id = %s"
+            p = [-1, id]
+            db_util.execute(q, p, commit=True)
+            continue
+
+        #if spec is not None:#this returns an html page
+            #print(spec)
+            #spec = SDSS.query_region(pos, radius=10*u.arcsec, spectro=True)
 
         file_name = id + ".fits"
         try:
@@ -43,8 +52,6 @@ def build_galaxy_profile(start_position=0, no_records=50000):
         q = "UPDATE galaxy_catalog SET fiber_id = %s, plate_id = %s, mjd = %s WHERE obj_id = %s"
         p = [int(spec["fiberID"].value[0]), int(spec["plate"].value[0]), int(spec["mjd"].value[0]), id]
         db_util.execute(q, p)
-
-
 
         corrected = profiler.dust_bias_correction(profiler.detect_emission_flux(file_name))
         q = "INSERT INTO galaxy_spectra_flux VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -72,10 +79,8 @@ def build_galaxy_profile(start_position=0, no_records=50000):
         if os.path.exists(file_name):
             os.remove(file_name)
 
-        print(id, " done")
-
     db_util.close()
 
 
 # now invoke
-build_galaxy_profile(no_records=10000)
+build_galaxy_profile(no_records=20)

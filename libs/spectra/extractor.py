@@ -135,7 +135,7 @@ class SpectralProfiler:
 
         result = self.detect_emission_flux(file_path)
 
-        if result["H_Alpha"] == 0 or result["H_Beta"]:
+        if result["H_Alpha"] == 0 or result["H_Beta"] == 0:
             return 0
 
         observed_ratio = result["H_Alpha"] / result["H_Beta"]
