@@ -40,7 +40,7 @@ class SpectralProfiler:
         plt.show()
 
 
-    def fit_line(self, w, f, center, window=10):
+    def __fit_line(self, w, f, center, window=10):
 
         def __gaussian__(x, amp, mu, sigma):
             return amp * np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))
@@ -61,8 +61,7 @@ class SpectralProfiler:
         sigma_guess = 2
 
         try:
-            popt, _ = curve_fit(__gaussian__, x, y, p0=[amp_guess, mu_guess, sigma_guess],
-                                bounds=([0, center - 3, 0.5], [np.inf, center + 3, 10]))
+            popt, _ = curve_fit(__gaussian__, x, y, p0=[amp_guess, mu_guess, sigma_guess], bounds=([0, center - 3, 0.5], [np.inf, center + 3, 10]))
             amp, mu, sigma = popt
 
             # Flux = area under Gaussian
@@ -73,7 +72,7 @@ class SpectralProfiler:
             return 0
 
 
-    def find_rest_wavelength(self, file_path: str):
+    def __find_rest_wavelength(self, file_path: str):
         hdul = fits.open(file_path)
 
         # data retreval from the file
@@ -95,9 +94,8 @@ class SpectralProfiler:
 
         return rest_wavelength, flux
 
-
-    def detect_emission_flux(self, file_path: str) -> dict:
-        rest_wavelength, flux = self.find_rest_wavelength(file_path)
+    def __detect_emission_flux(self, file_path: str, detection_lines: dict) -> dict:
+        rest_wavelength, flux = self.__find_rest_wavelength(file_path)
 
         # Remove stellar background -> in a real spectra steller background is also embedded
         # Fit continuum (exclude emission regions roughly)
@@ -105,72 +103,65 @@ class SpectralProfiler:
         continuum = p(rest_wavelength)
         flux_cont_sub = flux - continuum
 
-        detection_lines = {
-            "H_Alpha": 6563,  # Hα str formation
-            "H_Beta": 4861,
-            "O3_5007": 5007,  # Metallicity
-            "O3_4959": 4959,
-            "O2_3727": 3727,
-            "N2_6584": 6584,  # Metallicity
-            "N2_6548": 6548,
-            "S2_6716": 6716,  # Density
-            "S2_6731": 6731,  # Density
-            "Ne_3869": 3869,  # Ionization
-            "He_4686": 4686,  # Ho star/AGN
-            "Fe_5200": 5200 # Stellar population
-        }
+        if len(detection_lines) == 0:
+            detection_lines = {
+                "h_alpha": 6563,  # Hα star formation
+                "h_beta": 4861,
+                "o3_5007": 5007,  # Metallicity
+                "o3_4959": 4959,
+                "o2_3727": 3727,
+                "n2_6584": 6584,  # Metallicity
+                "n2_6548": 6548,
+                "s2_6716": 6716,  # Density
+                "s2_6731": 6731,  # Density
+                "ne_3869": 3869,  # Ionization
+                "he_4686": 4686,  # Ho star/AGN
+                "fe_5200": 5200 # Stellar population
+            }
 
         results = {}
         for name, center in detection_lines.items():
-            flux_val = self.fit_line(rest_wavelength, flux_cont_sub, center)
+            flux_val = self.__fit_line(rest_wavelength, flux_cont_sub, center)
             results[name] = flux_val
 
         return results
 
 
-    # using Kennicutt relation to find star formation rate FR(M⊙​/yr)=7.9×10−42×LHα​(erg/s)
-    def star_formation_rate(self, file_path: str) -> float:
-        # read the file
-        hdul = fits.open(file_path)
+    # FR(M⊙​/yr)=7.9×10−42×LHα​(erg/s)
+    # Kennicutt, R. C. (1998), "Star Formation in Galaxies Along the Hubble Sequence," Annual Review of Astronomy and Astrophysics, vol. 36, pp. 189–231
+    # Chabrier, G. (2003), "Galactic Stellar and Substellar Initial Mass Function," Publications of the Astronomical Society of the Pacific, vol. 115, no. 809, pp. 763–795
+    def star_formation_rate(self, h_alpha:float, h_beta:float, redshift:float) -> float:
 
-        result = self.detect_emission_flux(file_path)
-
-        if result["H_Alpha"] == 0 or result["H_Beta"] == 0:
+        if h_alpha == 0 or h_beta == 0:
             return 0
 
-        observed_ratio = result["H_Alpha"] / result["H_Beta"]
         intrinsic_ratio = 2.86
 
-        e_bv = 2.5 * np.log10(observed_ratio / intrinsic_ratio)
-
-        # simple correction factor
-        correction = 10 ** (0.4 * e_bv)
-
-        h_alpha_flux = result["H_Alpha"] * correction
-
-        # redshift
-        z = hdul[2].data['Z'][0]
+        a_ha = 0.0
+        observed_ratio = h_alpha / h_beta
+        if observed_ratio > 2.86:
+            ebv = 1.97 * np.log10(observed_ratio / 2.86)
+            a_ha = 3.33 * ebv
 
         # Convert redshift → distance Luminosity distance in cm
-        luminosity_distance = cosmo.luminosity_distance(z).to('cm').value
+        luminosity_distance = cosmo.luminosity_distance(redshift).to('cm').value
 
-        # flu -> luminosity L=4πdL2​×F
-        luminosity_h_alpha = 4 * np.pi * luminosity_distance ** 2 * h_alpha_flux
+        f_ha_corr = h_alpha * (10**(0.4 * a_ha)) * 1e-17
 
-        return 7.9e-42 * luminosity_h_alpha
+        l_ha = 4 * np.pi * (luminosity_distance**2) * f_ha_corr
+
+        return 7.9e-42 * l_ha
 
 
     # remove dust effects
-    def dust_bias_correction(self, emission_flux: dict) -> dict:
+    def __dust_bias_correction(self, emission_flux: dict, h_alpha: float=0, h_beta: float=0) -> dict:
         k = 2.5
         intrinsic_ratio = 2.86
 
-        if "H_Alpha" not in emission_flux or "H_Beta" not in emission_flux:
-            print("H_Alpha or H_Beta not found in the emission_flux.")
-            return
-
-        observed_ratio = emission_flux["H_Alpha"] / emission_flux["H_Beta"]
-        e_bv = k * np.log10(observed_ratio / intrinsic_ratio)
+        e_bv = k
+        if h_alpha > 0 and h_beta > 0:
+            observed_ratio = h_alpha / h_beta
+            e_bv = k * np.log10(observed_ratio / intrinsic_ratio)
 
         corrected = {}
 
@@ -184,90 +175,113 @@ class SpectralProfiler:
         return corrected
 
 
-    def detect_approximate_iron(self, file_path: str):
-        Fe5270_range = (5245, 5285)
-        Fe5335_range = (5315, 5355)
+    def __detect_iron_flux(self, file_path: str):
+        fe_5270_range = (5245, 5285)
+        fe_5335_range = (5315, 5355)
 
-        rest_wavelength, flux = self.find_rest_wavelength(file_path)
+        rest_wavelength, flux = self.__find_rest_wavelength(file_path)
 
         def measure_index(wave, flux, wmin, wmax):
             mask = (wave > wmin) & (wave < wmax)
             return np.mean(flux[mask])
 
-        Fe5270 = measure_index(rest_wavelength, flux, *Fe5270_range)
-        Fe5335 = measure_index(rest_wavelength, flux, *Fe5335_range)
+        fe_5270 = measure_index(rest_wavelength, flux, *fe_5270_range)
+        fe_5335 = measure_index(rest_wavelength, flux, *fe_5335_range)
 
-        Fe_index = (Fe5270 + Fe5335) / 2
-        log_FeH = -2.0 + 0.4 * Fe_index
-
-        return log_FeH
+        return fe_5270, fe_5335
 
 
-    # the ratio is in reltion to Hydroden as the baseline
-    def element_abundance_profile(self, file_path: str):
+    # the ratio is in reltion to Hydrogen as the baseline
+    def element_abundance_profile(self, corrected:dict):
         ratios = {}
 
-        result = self.detect_emission_flux(file_path)
-        corrected = self.dust_bias_correction(result)
-
-        if "H_Alpha" not in corrected or "H_Beta" not in corrected:
+        if "h_alpha" not in corrected or "h_beta" not in corrected:
             return
 
         ##### 1. OXYGEN and Matalicity #####
         # compute R23
-        total_oxygen = corrected["O3_5007"] + corrected["O3_4959"] + corrected["O2_3727"]
-        oxygen_R23 = 0
-        if total_oxygen != 0 and  corrected["H_Beta"] != 0:
-            oxygen_R23 = total_oxygen / corrected["H_Beta"]
+        total_oxygen = corrected["o3_5007"] + corrected["o3_4959"] + corrected["o2_3727"]
+        oxygen_r23 = 0
+        if total_oxygen != 0 and  corrected["h_beta"] != 0:
+            oxygen_r23 = total_oxygen / corrected["h_beta"]
 
         # compute O3N2 | metallicity_O3N2 > 8.4 = high otherwise low
         o3n2 = 0
-        if corrected["H_Beta"] > 0 and corrected["H_Alpha"] > 0:
-            o3n2 = np.log10((corrected["O3_5007"] / corrected["H_Beta"]) / (corrected["N2_6584"] / corrected["H_Alpha"]))
-        ratios["metallicity_O3N2"] = 8.73 - 0.32 * o3n2
+        if corrected["h_beta"] > 0 and corrected["h_alpha"] > 0:
+            o3n2 = np.log10((corrected["o3_5007"] / corrected["h_beta"]) / (corrected["n2_6584"] / corrected["h_alpha"]))
+        ratios["metallicity_o3n2"] = 8.73 - 0.32 * o3n2
 
-        ratios["metallicity_R23"] = 7.5 + 0.8 * np.log10(oxygen_R23)
-        if ratios["metallicity_O3N2"] > 8.4:
-            ratios["metallicity_R23"] = 9.2 - 0.3 * np.log10(oxygen_R23)
+        ratios["metallicity_r23"] = 7.5 + 0.8 * np.log10(oxygen_r23)
+        if ratios["metallicity_o3n2"] > 8.4:
+            ratios["metallicity_r23"] = 9.2 - 0.3 * np.log10(oxygen_r23)
 
-        # weighted combined metalicity - (research + production grade)
-        # intepretation -> 12 + log(O/H) = final_metallicity
-        ratios["final_metallicity"] = 0.6 * ratios["metallicity_O3N2"] + 0.4 * ratios["metallicity_R23"]
+        # weighted combined metallicity - (research + production grade)
+        # interpretation -> 12 + log(O/H) = final_metallicity
+        ratios["final_metallicity"] = 0.6 * ratios["metallicity_o3n2"] + 0.4 * ratios["metallicity_r23"]
 
         # log(O/H) = final_metallicity - 12
-        log_OH = ratios["final_metallicity"] - 12
-        ratios["oxygen"] = 10 ** log_OH
+        log_oh = ratios["final_metallicity"] - 12
+        ratios["oxygen"] = 10 ** log_oh
 
         ##### 2. NITROGEN #####
         # calculate log(N/O) ratio and add a calibration offset of 0.05
-        log_NO = 0.05
-        if corrected["O2_3727"] > 0:
-            log_NO = np.log10(corrected["N2_6584"] / corrected["O2_3727"]) + log_NO
+        log_no = 0.05
+        if corrected["o2_3727"] > 0:
+            log_no = np.log10(corrected["n2_6584"] / corrected["o2_3727"]) + log_no
 
         # log(N/H) = log(N/O)+log(O/H)
-        log_NH = log_NO + log_OH
-        ratios["nitrogen"] = 10 ** log_NH
+        log_nh = log_no + log_oh
+        ratios["nitrogen"] = 10 ** log_nh
 
         ##### 3. CARBON ##### this is an indirect estimate, flux lines are weak and complicated. only Ultra-Violet files can catch them
 
         # plan log(C/O) = a + b × (12+log(O/H)) where a, b are calibration values | log(C/H) = log(C/O) + log(O/H)
-        log_CO = -0.8 + 0.14 * (ratios["final_metallicity"] - 8.0)
-        log_CH = log_CO + log_OH
-        ratios["carbon"] = 10 ** log_CH
+        log_co = -0.8 + 0.14 * (ratios["final_metallicity"] - 8.0)
+        log_ch = log_co + log_oh
+        ratios["carbon"] = 10 ** log_ch
 
         ##### 4. SULPHUR #####
         sulphur_oxygen_ratio = 0.025
         ratios["sulphur"] = ratios["oxygen"] * sulphur_oxygen_ratio
 
-        ##### 5. stimate NEON #####
-        log_NeO =  0.7
-        if corrected["O3_5007"] != 0 or corrected["O3_4959"]:
-            log_NeO = np.log10(corrected["Ne_3869"] / (corrected["O3_5007"] + corrected["O3_4959"])) + log_NeO
+        ##### 5. estimate NEON #####
+        log_neo =  0.7
+        if corrected["o3_5007"] != 0 or corrected["o3_4959"]:
+            log_neo = np.log10(corrected["ne_3869"] / (corrected["o3_5007"] + corrected["o3_4959"])) + log_neo
 
-        log_NeH = log_NeO + log_OH
-        ratios["neon"] = 10 ** log_NeH
+        log_neh = log_neo + log_oh
+        ratios["neon"] = 10 ** log_neh
 
         ##### 6. Iron (Fe) ##### this can't be interpreted as ratio Fe/H
-        ratios["iron_strength"] = self.detect_approximate_iron(file_path)
+        fe_index = (corrected['fe_5270'] + corrected['fe_5335']) / 2
+        ratios["iron_strength"] = -2.0 + 0.4 * fe_index
 
         return ratios
+
+    def corrected_emission_flux(self, file_path: str):
+        hdul = fits.open(file_path)
+        target_maps = {'H_beta': 'h_beta', 'H_alpha': 'h_alpha', '[O_III] 5007': 'o3_5007', '[O_III] 4959': 'o3_4959', '[O_II] 3727': 'o2_3727', '[N_II] 6583': 'n2_6584', '[N_II] 6548': 'n2_6548', '[S_II] 6716': 's2_6716', '[S_II] 6730': 's2_6731', '[Ne_III] 3868': 'ne_3869', 'He_II 4685': 'he_4686'}
+        line_data = hdul["SPZLINE"].data
+        redshift = hdul[2].data['Z'][0]
+
+        flux = {}
+        for r in line_data:
+            if r['LINENAME'].strip() in target_maps:
+                flux[target_maps[r['LINENAME'].strip()]] = r['LINEAREA']
+
+        # this step is done due to unavailability of iron in SPZLINE (not already calculated)
+        # rest of them already calculated, no need to do again
+        wavelengths = {"h_alpha": 6563, "h_beta": 4861, "fe_5200": 5200}
+        result = self.__detect_emission_flux(file_path, wavelengths)
+        flux["h_alpha_obs"] = result["h_alpha"]
+        flux["h_beta_obs"] = result["h_beta"]
+        result = self.__dust_bias_correction(result, h_alpha=result["h_alpha"], h_beta=result["h_beta"])
+        flux["fe_5200"] = result["fe_5200"]
+        flux["fe_5270"], flux["fe_5335"] = self.__detect_iron_flux(file_path)
+
+        diff = set(target_maps.values()) - set(flux.keys())
+        for k in diff:
+            flux[k] = 0
+
+        hdul.close()
+        return flux, redshift
