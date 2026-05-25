@@ -110,12 +110,12 @@ class SpectralProfiler:
                 "o3_5007": 5007,  # Metallicity
                 "o3_4959": 4959,
                 "o2_3727": 3727,
-                "n2_6584": 6584,  # Metallicity
+                "n2_6583": 6583,  # Metallicity
                 "n2_6548": 6548,
                 "s2_6716": 6716,  # Density
-                "s2_6731": 6731,  # Density
-                "ne_3869": 3869,  # Ionization
-                "he_4686": 4686,  # Ho star/AGN
+                "s2_6730": 6730,  # Density
+                "ne_3868": 3868,  # Ionization
+                "he_4685": 4685,  # Ho star/AGN
                 "fe_5200": 5200 # Stellar population
             }
 
@@ -208,7 +208,7 @@ class SpectralProfiler:
         # compute O3N2 | metallicity_O3N2 > 8.4 = high otherwise low
         o3n2 = 0
         if corrected["h_beta"] > 0 and corrected["h_alpha"] > 0:
-            o3n2 = np.log10((corrected["o3_5007"] / corrected["h_beta"]) / (corrected["n2_6584"] / corrected["h_alpha"]))
+            o3n2 = np.log10((corrected["o3_5007"] / corrected["h_beta"]) / (corrected["n2_6583"] / corrected["h_alpha"]))
         ratios["metallicity_o3n2"] = 8.73 - 0.32 * o3n2
 
         ratios["metallicity_r23"] = 7.5 + 0.8 * np.log10(oxygen_r23)
@@ -227,7 +227,7 @@ class SpectralProfiler:
         # calculate log(N/O) ratio and add a calibration offset of 0.05
         log_no = 0.05
         if corrected["o2_3727"] > 0:
-            log_no = np.log10(corrected["n2_6584"] / corrected["o2_3727"]) + log_no
+            log_no = np.log10(corrected["n2_6583"] / corrected["o2_3727"]) + log_no
 
         # log(N/H) = log(N/O)+log(O/H)
         log_nh = log_no + log_oh
@@ -247,7 +247,7 @@ class SpectralProfiler:
         ##### 5. estimate NEON #####
         log_neo =  0.7
         if corrected["o3_5007"] != 0 or corrected["o3_4959"]:
-            log_neo = np.log10(corrected["ne_3869"] / (corrected["o3_5007"] + corrected["o3_4959"])) + log_neo
+            log_neo = np.log10(corrected["ne_3868"] / (corrected["o3_5007"] + corrected["o3_4959"])) + log_neo
 
         log_neh = log_neo + log_oh
         ratios["neon"] = 10 ** log_neh
@@ -260,7 +260,7 @@ class SpectralProfiler:
 
     def corrected_emission_flux(self, file_path: str):
         hdul = fits.open(file_path)
-        target_maps = {'H_beta': 'h_beta', 'H_alpha': 'h_alpha', '[O_III] 5007': 'o3_5007', '[O_III] 4959': 'o3_4959', '[O_II] 3727': 'o2_3727', '[N_II] 6583': 'n2_6584', '[N_II] 6548': 'n2_6548', '[S_II] 6716': 's2_6716', '[S_II] 6730': 's2_6731', '[Ne_III] 3868': 'ne_3869', 'He_II 4685': 'he_4686'}
+        target_maps = {'H_beta': 'h_beta', 'H_alpha': 'h_alpha', '[O_III] 5007': 'o3_5007', '[O_III] 4959': 'o3_4959', '[O_II] 3727': 'o2_3727', '[N_II] 6583': 'n2_6583', '[N_II] 6548': 'n2_6548', '[S_II] 6716': 's2_6716', '[S_II] 6730': 's2_6730', '[Ne_III] 3868': 'ne_3868', 'He_II 4685': 'he_4685'}
         line_data = hdul["SPZLINE"].data
         redshift = hdul[2].data['Z'][0]
 
@@ -273,8 +273,8 @@ class SpectralProfiler:
         # rest of them already calculated, no need to do again
         wavelengths = {"h_alpha": 6563, "h_beta": 4861, "fe_5200": 5200}
         result = self.__detect_emission_flux(file_path, wavelengths)
-        flux["h_alpha_obs"] = result["h_alpha"]
-        flux["h_beta_obs"] = result["h_beta"]
+        flux["h_alpha_observed"] = result["h_alpha"]
+        flux["h_beta_observed"] = result["h_beta"]
         result = self.__dust_bias_correction(result, h_alpha=result["h_alpha"], h_beta=result["h_beta"])
         flux["fe_5200"] = result["fe_5200"]
         flux["fe_5270"], flux["fe_5335"] = self.__detect_iron_flux(file_path)
