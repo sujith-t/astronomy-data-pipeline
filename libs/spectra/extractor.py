@@ -9,12 +9,15 @@ Created on Sun Apr  5 15:34:26 2026
 from astropy.io import fits
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
 from numpy.polynomial.polynomial import Polynomial
 from scipy.optimize import curve_fit
 from astropy.cosmology import Planck18 as cosmo
 
 
 class SpectralProfiler:
+
+    logger = logging.getLogger("SpectralProfiler")
 
     def plot_line_wavelength_vs_flux(self, file_path: str, lower_limit, upper_limit, title: str):
         hdul = fits.open(file_path)
@@ -75,7 +78,7 @@ class SpectralProfiler:
     def __find_rest_wavelength(self, file_path: str):
         hdul = fits.open(file_path)
 
-        # data retreval from the file
+        # data retrieval from the file
         data = hdul[1].data
         flux = data['flux']
         loglam = data['loglam']
@@ -92,6 +95,7 @@ class SpectralProfiler:
         z = hdul[2].data['Z'][0]
         rest_wavelength = wavelength / (1 + z)
 
+        hdul.close()
         return rest_wavelength, flux
 
     def __detect_emission_flux(self, file_path: str, detection_lines: dict) -> dict:
@@ -114,6 +118,8 @@ class SpectralProfiler:
                 "n2_6548": 6548,
                 "s2_6716": 6716,  # Density
                 "s2_6730": 6730,  # Density
+                "s3_9069": 9069,
+                "s3_9532": 9532,
                 "ne_3868": 3868,  # Ionization
                 "he_4685": 4685,  # Ho star/AGN
                 "fe_5200": 5200 # Stellar population
@@ -140,7 +146,7 @@ class SpectralProfiler:
         a_ha = 0.0
         observed_ratio = h_alpha / h_beta
         if observed_ratio > 2.86:
-            ebv = 1.97 * np.log10(observed_ratio / 2.86)
+            ebv = 1.97 * np.log10(observed_ratio / intrinsic_ratio)
             a_ha = 3.33 * ebv
 
         # Convert redshift → distance Luminosity distance in cm
@@ -192,7 +198,7 @@ class SpectralProfiler:
 
 
     # the ratio is in reltion to Hydrogen as the baseline
-    def element_abundance_profile(self, corrected:dict):
+    def element_abundance_profile(self, corrected:dict, redshift: float=0.09):
         ratios = {}
 
         if "h_alpha" not in corrected or "h_beta" not in corrected:
@@ -209,9 +215,10 @@ class SpectralProfiler:
         o3n2 = 0
         if corrected["h_beta"] > 0 and corrected["h_alpha"] > 0:
             o3n2 = np.log10((corrected["o3_5007"] / corrected["h_beta"]) / (corrected["n2_6583"] / corrected["h_alpha"]))
-        ratios["metallicity_o3n2"] = 8.73 - 0.32 * o3n2
 
+        ratios["metallicity_o3n2"] = 8.73 - 0.32 * o3n2
         ratios["metallicity_r23"] = 7.5 + 0.8 * np.log10(oxygen_r23)
+
         if ratios["metallicity_o3n2"] > 8.4:
             ratios["metallicity_r23"] = 9.2 - 0.3 * np.log10(oxygen_r23)
 
@@ -241,8 +248,23 @@ class SpectralProfiler:
         ratios["carbon"] = 10 ** log_ch
 
         ##### 4. SULPHUR #####
-        sulphur_oxygen_ratio = 0.025
-        ratios["sulphur"] = ratios["oxygen"] * sulphur_oxygen_ratio
+        ratios["sulphur"] = 0
+
+        if redshift < 0.09:
+            # widely adopted empirical polynomial from Díaz et al
+            # 12 + log10(S/H) = 5.79 + (1.54 x log10(S23)) + (0.15 x log10(S23)^2)
+            s23 = (corrected["s2_6716"] + corrected["s2_6730"] + corrected["s3_9069"] + corrected["s3_9532"]) / corrected["h_beta"]
+            log_sh = 5.79 + (1.54 * np.log10(s23)) + (0.15 * np.log10(s23) ** 2) - 12
+            ratios["sulphur"] = 10 ** log_sh
+            SpectralProfiler.logger.debug("Full S23 Calculation")
+        elif 0.09 <= redshift < 0.54:
+            # using standard empirical calibrations. log10(S/O) = 1.6, [12 + log10(O/H)] = metallicity
+            # 12 + log10(S/H) = [12 + log10(O/H)] - log10(S/O)
+            log_sh = (ratios["final_metallicity"] - 1.6) - 12
+            ratios["sulphur"] = 10 ** log_sh
+            SpectralProfiler.logger.debug("S3 Redshifted out. Using pure S2 calibrations")
+        else:
+            SpectralProfiler.logger.warn("Warning: All primary optical Sulphur lines have left the BOSS window")
 
         ##### 5. estimate NEON #####
         log_neo =  0.7
@@ -271,13 +293,14 @@ class SpectralProfiler:
 
         # this step is done due to unavailability of iron in SPZLINE (not already calculated)
         # rest of them already calculated, no need to do again
-        wavelengths = {"h_alpha": 6563, "h_beta": 4861, "fe_5200": 5200}
+        wavelengths = {"h_alpha": 6563, "h_beta": 4861, "fe_5200": 5200, "s2_6716": 6716, "s2_6730": 6730, "s3_9069": 9069, "s3_9532": 9532}
         result = self.__detect_emission_flux(file_path, wavelengths)
         flux["h_alpha_observed"] = result["h_alpha"]
         flux["h_beta_observed"] = result["h_beta"]
         result = self.__dust_bias_correction(result, h_alpha=result["h_alpha"], h_beta=result["h_beta"])
         flux["fe_5200"] = result["fe_5200"]
         flux["fe_5270"], flux["fe_5335"] = self.__detect_iron_flux(file_path)
+        flux["s3_9069"], flux["s3_9532"] = result["s3_9069"], result["s3_9532"]
 
         diff = set(target_maps.values()) - set(flux.keys())
         for k in diff:
