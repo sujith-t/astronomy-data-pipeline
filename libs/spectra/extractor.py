@@ -274,7 +274,7 @@ class SpectralProfiler:
         log_neh = log_neo + log_oh
         ratios["neon"] = 10 ** log_neh
 
-        ##### 6. Iron (Fe) ##### this can't be interpreted as ratio Fe/H
+        ##### 6. Iron (Fe) ##### this can't be interpreted as ratio Fe/H, Trager et al, Johansson, Thomas, & Maraston (2010)
         fe_index = (corrected['fe_5270'] + corrected['fe_5335']) / 2
         ratios["iron_strength"] = -2.0 + 0.4 * fe_index
 
