@@ -194,7 +194,7 @@ class SpectralProfiler:
         fe_5270 = measure_index(rest_wavelength, flux, *fe_5270_range)
         fe_5335 = measure_index(rest_wavelength, flux, *fe_5335_range)
 
-        return fe_5270, fe_5335
+        return float(fe_5270), float(fe_5335)
 
 
     # the ratio is in reltion to Hydrogen as the baseline
@@ -284,23 +284,23 @@ class SpectralProfiler:
         hdul = fits.open(file_path)
         target_maps = {'H_beta': 'h_beta', 'H_alpha': 'h_alpha', '[O_III] 5007': 'o3_5007', '[O_III] 4959': 'o3_4959', '[O_II] 3727': 'o2_3727', '[N_II] 6583': 'n2_6583', '[N_II] 6548': 'n2_6548', '[S_II] 6716': 's2_6716', '[S_II] 6730': 's2_6730', '[Ne_III] 3868': 'ne_3868', 'He_II 4685': 'he_4685'}
         line_data = hdul["SPZLINE"].data
-        redshift = hdul[2].data['Z'][0]
+        redshift = float(hdul[2].data['Z'][0])
 
         flux = {}
         for r in line_data:
             if r['LINENAME'].strip() in target_maps:
-                flux[target_maps[r['LINENAME'].strip()]] = r['LINEAREA']
+                flux[target_maps[r['LINENAME'].strip()]] = float(r['LINEAREA'])
 
         # this step is done due to unavailability of iron in SPZLINE (not already calculated)
         # rest of them already calculated, no need to do again
         wavelengths = {"h_alpha": 6563, "h_beta": 4861, "fe_5200": 5200, "s2_6716": 6716, "s2_6730": 6730, "s3_9069": 9069, "s3_9532": 9532}
         result = self.__detect_emission_flux(file_path, wavelengths)
-        flux["h_alpha_observed"] = result["h_alpha"]
-        flux["h_beta_observed"] = result["h_beta"]
+        flux["h_alpha_observed"] = float(result["h_alpha"])
+        flux["h_beta_observed"] = float(result["h_beta"])
         result = self.__dust_bias_correction(result, h_alpha=result["h_alpha"], h_beta=result["h_beta"])
-        flux["fe_5200"] = result["fe_5200"]
+        flux["fe_5200"] = float(result["fe_5200"])
         flux["fe_5270"], flux["fe_5335"] = self.__detect_iron_flux(file_path)
-        flux["s3_9069"], flux["s3_9532"] = result["s3_9069"], result["s3_9532"]
+        flux["s3_9069"], flux["s3_9532"] = float(result["s3_9069"]), float(result["s3_9532"])
 
         diff = set(target_maps.values()) - set(flux.keys())
         for k in diff:
