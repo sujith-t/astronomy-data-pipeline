@@ -36,8 +36,8 @@ class MySQLUtil:
             self.params.clear()
             cursor.close()
 
-    def fetch_all(self, sql:str, params=None):
-        cursor = MySQLUtil.connection.cursor()
+    def fetch_all(self, sql:str, params=None, col_names:bool=False):
+        cursor = MySQLUtil.connection.cursor(dictionary=col_names)
         if params is None:
             cursor.execute(sql)
         else:
@@ -47,8 +47,8 @@ class MySQLUtil:
         cursor.close()
         return rows
 
-    def fetch_one(self, sql:str, params=None):
-        cursor = MySQLUtil.connection.cursor()
+    def fetch_one(self, sql:str, params=None, col_names:bool=False):
+        cursor = MySQLUtil.connection.cursor(dictionary=col_names)
         if params is None:
             cursor.execute(sql)
         else:

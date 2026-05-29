@@ -87,9 +87,9 @@ class SpectralProfiler:
         wavelength = 10 ** loglam
 
         # Convert ivar to error
-        error = np.zeros_like(ivar)
+        #error = np.zeros_like(ivar)
         mask = ivar > 0
-        error[mask] = 1 / np.sqrt(ivar[mask])
+        #error[mask] = 1 / np.sqrt(ivar[mask])
 
         # redshift correction
         z = hdul[2].data['Z'][0]
@@ -113,7 +113,7 @@ class SpectralProfiler:
                 "h_beta": 4861,
                 "o3_5007": 5007,  # Metallicity
                 "o3_4959": 4959,
-                "o2_3727": 3727,
+                "o2_3727": 3727.09,
                 "n2_6583": 6583,  # Metallicity
                 "n2_6548": 6548,
                 "s2_6716": 6716,  # Density
@@ -204,23 +204,48 @@ class SpectralProfiler:
         if "h_alpha" not in corrected or "h_beta" not in corrected:
             return
 
-        ##### 1. OXYGEN and Matalicity #####
-        # compute R23
+        """
+        1. OXYGEN and Metallicity 
+        Calculates R23 metallicity and automatically breaks the branch degeneracy.
+        Uses [NII]/[OII] boundary at -1.2 (Kewley & Ellison 2008).
+        """
         total_oxygen = corrected["o3_5007"] + corrected["o3_4959"] + corrected["o2_3727"]
-        oxygen_r23 = 0
+        # 1. Calculate standard line ratios
+        log_o_r23 = 0
         if total_oxygen != 0 and  corrected["h_beta"] != 0:
-            oxygen_r23 = total_oxygen / corrected["h_beta"]
+            log_o_r23 = np.log10(total_oxygen / corrected["h_beta"])
+
+        # Ionization parameter proxy
+        log_o32 = 0
+        if corrected["o2_3727"] != 0:
+            log_o32 = np.log10((corrected["o3_4959"] + corrected["o3_5007"]) / corrected["o2_3727"])
+
+        # Degeneracy breaker ratio
+        # calculate log(N/O) ratio and add a calibration offset of 0.05
+        log_no = 0
+        if corrected["o2_3727"] > 0:
+            log_no = np.log10(corrected["n2_6583"] / corrected["o2_3727"]) + log_no
+
+        # Branch selection logic (Kobulnicky & Kewley 2004)
+        if log_no < -1.2:
+            SpectralProfiler.logger.debug("Low Metallicity branch triggered for R23 calculation")
+            ratios["metallicity_r23"] = 8.0 + 0.3 * log_o_r23 - 0.25 * log_o32
+        else:
+            SpectralProfiler.logger.debug("High Metallicity branch triggered for R23 calculation")
+            # Precise KK04 Upper Branch polynomial:
+            ratios["metallicity_r23"] = 8.85 - 0.65 * log_o_r23 - 0.2 * log_o32
 
         # compute O3N2 | metallicity_O3N2 > 8.4 = high otherwise low
-        o3n2 = 0
+        log_o3n2 = 0
         if corrected["h_beta"] > 0 and corrected["h_alpha"] > 0:
-            o3n2 = np.log10((corrected["o3_5007"] / corrected["h_beta"]) / (corrected["n2_6583"] / corrected["h_alpha"]))
+            log_o3n2 = np.log10((corrected["o3_5007"] / corrected["h_beta"]) / (corrected["n2_6583"] / corrected["h_alpha"]))
 
-        ratios["metallicity_o3n2"] = 8.73 - 0.32 * o3n2
-        ratios["metallicity_r23"] = 7.5 + 0.8 * np.log10(oxygen_r23)
+        # Pettini & Pagel (2004) Calibration
+        ratios["metallicity_o3n2"] = 8.73 - 0.32 * log_o3n2
 
-        if ratios["metallicity_o3n2"] > 8.4:
-            ratios["metallicity_r23"] = 9.2 - 0.3 * np.log10(oxygen_r23)
+        # discrepancy
+        if abs(ratios["metallicity_o3n2"] - ratios["metallicity_r23"]) > 0.2:
+            SpectralProfiler.logger.warning(f"O3N2/R23 discrepancy detected: {ratios['metallicity_o3n2']:.2f} vs {ratios['metallicity_r23']:.2f}")
 
         # weighted combined metallicity - (research + production grade)
         # interpretation -> 12 + log(O/H) = final_metallicity
@@ -231,11 +256,6 @@ class SpectralProfiler:
         ratios["oxygen"] = 10 ** log_oh
 
         ##### 2. NITROGEN #####
-        # calculate log(N/O) ratio and add a calibration offset of 0.05
-        log_no = 0.05
-        if corrected["o2_3727"] > 0:
-            log_no = np.log10(corrected["n2_6583"] / corrected["o2_3727"]) + log_no
-
         # log(N/H) = log(N/O)+log(O/H)
         log_nh = log_no + log_oh
         ratios["nitrogen"] = 10 ** log_nh
@@ -264,7 +284,7 @@ class SpectralProfiler:
             ratios["sulphur"] = 10 ** log_sh
             SpectralProfiler.logger.debug("S3 Redshifted out. Using pure S2 calibrations")
         else:
-            SpectralProfiler.logger.warn("Warning: All primary optical Sulphur lines have left the BOSS window")
+            SpectralProfiler.logger.warning("Warning: All primary optical Sulphur lines have left the BOSS window")
 
         ##### 5. estimate NEON #####
         log_neo =  0.7
