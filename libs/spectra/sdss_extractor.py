@@ -17,7 +17,23 @@ from astropy.cosmology import Planck18 as cosmo
 
 class SpectralProfiler:
 
-    logger = logging.getLogger("SpectralProfiler")
+    logger = logging.getLogger("__spec_profiler__")
+    lines = {
+        "h_alpha": 6564.61,  # Hα star formation
+        "h_beta": 4862.68,
+        "o3_5007": 5007,  # Metallicity
+        "o3_4959": 4959,
+        "o2_3727": 3727.09,
+        "n2_6583": 6583,  # Metallicity
+        "n2_6548": 6548,
+        "s2_6716": 6716,  # Density
+        "s2_6730": 6730,  # Density
+        "s3_9069": 9069,
+        "s3_9532": 9532,
+        "ne_3868": 3868,  # Ionization
+        "he_4685": 4685,  # Ho star/AGN
+        "fe_5200": 5200 # Stellar population
+    }
 
     def plot_line_wavelength_vs_flux(self, file_path: str, lower_limit, upper_limit, title: str):
         hdul = fits.open(file_path)
@@ -43,32 +59,30 @@ class SpectralProfiler:
         plt.show()
 
 
-    def __fit_line(self, w, f, center, window=10):
+    def __fit_line(self, w, f, center, window=25):
 
-        def __gaussian__(x, amp, mu, sigma):
+        def gaussian(x, amp, mu, sigma):
             return amp * np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))
 
-        mask = (w > center - window) & (w < center + window)
+        # 1. Isolate the window
+        half_window = window / 2.0
+        mask = (w >= (center - half_window)) & (w <= (center + half_window))
         x = w[mask]
         y = f[mask]
-
-        # local continuum = np.median(y)
-        y = y - np.median(y)
 
         if len(x) < 5:
             return 0
 
         # Initial guesses
-        amp_guess = max(np.max(y), 1e-3)
-        mu_guess = center
-        sigma_guess = 2
+        y_max = 0 if len(y) == 0 else np.max(y)
+        initial_guesses = [y_max, center, 2.5]
 
         try:
-            popt, _ = curve_fit(__gaussian__, x, y, p0=[amp_guess, mu_guess, sigma_guess], bounds=([0, center - 3, 0.5], [np.inf, center + 3, 10]))
-            amp, mu, sigma = popt
+            popt, _ = curve_fit(gaussian, x, y, p0=initial_guesses)
+            fit_amp, fit_mean, fit_stddev = popt
 
             # Flux = area under Gaussian
-            flux_line = amp * sigma * np.sqrt(2 * np.pi)
+            flux_line = fit_amp * np.abs(fit_stddev) * np.sqrt(2 * np.pi)
 
             return flux_line
         except:
@@ -82,14 +96,8 @@ class SpectralProfiler:
         data = hdul[1].data
         flux = data['flux']
         loglam = data['loglam']
-        ivar = data['ivar']  # inverse variance
 
         wavelength = 10 ** loglam
-
-        # Convert ivar to error
-        #error = np.zeros_like(ivar)
-        mask = ivar > 0
-        #error[mask] = 1 / np.sqrt(ivar[mask])
 
         # redshift correction
         z = hdul[2].data['Z'][0]
@@ -100,34 +108,51 @@ class SpectralProfiler:
 
     def __detect_emission_flux(self, file_path: str, detection_lines: dict) -> dict:
         rest_wavelength, flux = self.__find_rest_wavelength(file_path)
+        hdul = fits.open(file_path)
 
-        # Remove stellar background -> in a real spectra steller background is also embedded
-        # Fit continuum (exclude emission regions roughly)
-        p = Polynomial.fit(rest_wavelength, flux, deg=3)
-        continuum = p(rest_wavelength)
-        flux_cont_sub = flux - continuum
+        ivar = hdul['COADD'].data['ivar']
+        continuum_windows = [
+            (4200, 4280),
+            (4450, 4600),
+            (5050, 5400),
+            (6000, 6200),
+            (6800, 7000)
+        ]
+
+        # Create a master mask for pixels that fall inside ANY continuum window
+        # Also ensure the pixel is valid (inverse variance > 0)
+        continuum_mask = np.zeros(len(rest_wavelength), dtype=bool)
+        for start, end in continuum_windows:
+            window_mask = (rest_wavelength >= start) & (rest_wavelength <= end)
+            continuum_mask = continuum_mask | window_mask
+
+        # Exclude bad/flagged data points
+        valid_continuum_mask = continuum_mask & (ivar > 0)
+
+        fit_wave = rest_wavelength[valid_continuum_mask]
+        fit_flux = flux[valid_continuum_mask]
+        if len(fit_wave) == 0:
+            SpectralProfiler.logger.warning("No valid data points found in the specified continuum windows")
+            return {}
+
+        # Fit a polynomial to the isolated continuum points
+        # numpy.polyfit computes a least-squares polynomial fit
+        poly_coefficients = np.polyfit(fit_wave, fit_flux, deg=3)
+
+        # Evaluate the polynomial across the ENTIRE rest-wavelength grid
+        # This creates your baseline continuum model
+        continuum_model = np.polyval(poly_coefficients, rest_wavelength)
+
+        # Calculate Pure Emission Line Spectrum (Continuum Subtracted)
+        # This is exactly what you need before fitting Gaussians to H-alpha or H-beta!
+        pure_lines_flux = flux - continuum_model
 
         if len(detection_lines) == 0:
-            detection_lines = {
-                "h_alpha": 6563,  # Hα star formation
-                "h_beta": 4861,
-                "o3_5007": 5007,  # Metallicity
-                "o3_4959": 4959,
-                "o2_3727": 3727.09,
-                "n2_6583": 6583,  # Metallicity
-                "n2_6548": 6548,
-                "s2_6716": 6716,  # Density
-                "s2_6730": 6730,  # Density
-                "s3_9069": 9069,
-                "s3_9532": 9532,
-                "ne_3868": 3868,  # Ionization
-                "he_4685": 4685,  # Ho star/AGN
-                "fe_5200": 5200 # Stellar population
-            }
+            detection_lines = self.lines
 
         results = {}
         for name, center in detection_lines.items():
-            flux_val = self.__fit_line(rest_wavelength, flux_cont_sub, center)
+            flux_val = self.__fit_line(rest_wavelength, pure_lines_flux, center)
             results[name] = flux_val
 
         return results
@@ -312,8 +337,9 @@ class SpectralProfiler:
                 flux[target_maps[r['LINENAME'].strip()]] = float(r['LINEAREA'])
 
         # this step is done due to unavailability of iron in SPZLINE (not already calculated)
-        # rest of them already calculated, no need to do again
-        wavelengths = {"h_alpha": 6563, "h_beta": 4861, "fe_5200": 5200, "s2_6716": 6716, "s2_6730": 6730, "s3_9069": 9069, "s3_9532": 9532}
+        # rest of them already calculated, no need to do again. h-alpha,h-beta are calculated to detect the observed values
+        wavelengths = {"h_alpha": self.lines["h_alpha"], "h_beta": self.lines["h_beta"], "fe_5200": self.lines["fe_5200"], "s2_6716": self.lines["s2_6716"],
+                       "s2_6730": self.lines["s2_6730"], "s3_9069": self.lines["s3_9069"], "s3_9532": self.lines["s3_9532"]}
         result = self.__detect_emission_flux(file_path, wavelengths)
         flux["h_alpha_observed"] = float(result["h_alpha"])
         flux["h_beta_observed"] = float(result["h_beta"])
