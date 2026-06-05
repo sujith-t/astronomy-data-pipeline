@@ -225,7 +225,7 @@ class SpectralProfiler:
         return float(fe_5270), float(fe_5335)
 
 
-    # the ratio is in reltion to Hydrogen as the baseline
+    # the ratio is in relation to Hydrogen as the baseline
     def element_abundance_profile(self, corrected:dict, redshift: float=0.09):
         ratios = {}
 
@@ -234,18 +234,29 @@ class SpectralProfiler:
 
         h_alpha = corrected["h_alpha"]
         h_beta = corrected["h_beta"]
+        metallicity_o3n2, metallicity_r23, final_metallicity, temperature_exact = None, None, None, None
+        if "o3_4363" in corrected and corrected["o3_4363"] > 0:
+            final_metallicity, temperature_exact = self.__metallicity_o3_4363(corrected["o2_3727"], corrected["o3_4363"], corrected["o3_5007"], h_beta)
+        else:
+            # weighted combined metallicity - (research + production grade)
+            # interpretation -> 12 + log(O/H) = final_metallicity
+            metallicity_o3n2, metallicity_r23 = self.__metallicity_empirical(corrected["o2_3727"], corrected["o3_4959"], corrected["o3_5007"], corrected["n2_6583"], h_alpha, h_beta)
+            final_metallicity = 0.6 * metallicity_o3n2 + 0.4 * metallicity_r23
 
-        metallicity_o3n2, metallicity_r23 = self.__metallicity_empirical(corrected["o2_3727"], corrected["o3_4959"], corrected["o3_5007"], corrected["n2_6583"], h_alpha, h_beta)
-
-        # weighted combined metallicity - (research + production grade)
-        # interpretation -> 12 + log(O/H) = final_metallicity
-        ratios["final_metallicity"] = 0.6 * metallicity_o3n2 + 0.4 * metallicity_r23
+        ratios["metallicity_r23"] = metallicity_r23
+        ratios["metallicity_o3n2"] = metallicity_o3n2
+        ratios["final_metallicity"] = final_metallicity
+        ratios["temperature_exact"] = temperature_exact
 
         # log(O/H) = final_metallicity - 12
         log_oh = ratios["final_metallicity"] - 12
         ratios["oxygen"] = 10 ** log_oh
 
         ##### 2. NITROGEN #####
+        log_no = 0
+        if corrected["o2_3727"] > 0:
+            log_no = np.log10(corrected["n2_6583"] / corrected["o2_3727"]) + log_no
+
         # log(N/H) = log(N/O)+log(O/H)
         log_nh = log_no + log_oh
         ratios["nitrogen"] = 10 ** log_nh
@@ -263,7 +274,7 @@ class SpectralProfiler:
         if redshift < 0.09:
             # widely adopted empirical polynomial from Díaz et al
             # 12 + log10(S/H) = 5.79 + (1.54 x log10(S23)) + (0.15 x log10(S23)^2)
-            s23 = (corrected["s2_6716"] + corrected["s2_6730"] + corrected["s3_9069"] + corrected["s3_9532"]) / corrected["h_beta"]
+            s23 = (corrected["s2_6716"] + corrected["s2_6730"] + corrected["s3_9069"] + corrected["s3_9532"]) / h_beta
             log_sh = 5.79 + (1.54 * np.log10(s23)) + (0.15 * np.log10(s23) ** 2) - 12
             ratios["sulphur"] = 10 ** log_sh
             SpectralProfiler.logger.debug("Full S23 Calculation")
@@ -313,7 +324,6 @@ class SpectralProfiler:
             log_o32 = np.log10((o3_4959 + o3_5007) / o2_3727)
 
         # Degeneracy breaker ratio
-        # calculate log(N/O) ratio and add a calibration offset of 0.05
         log_no = 0
         if o2_3727 > 0:
             log_no = np.log10(n2_6583 / o2_3727) + log_no
@@ -341,7 +351,6 @@ class SpectralProfiler:
             SpectralProfiler.logger.warning(f"O3N2/R23 discrepancy detected: {metallicity_o3n2:.2f} vs {metallicity_r23:.2f}")
 
         return metallicity_o3n2, metallicity_r23
-
 
 
     """
