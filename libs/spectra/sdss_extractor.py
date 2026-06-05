@@ -6,11 +6,13 @@ Created on Sun Apr  5 15:34:26 2026
 @author: sujith-t
 """
 
-from astropy.io import fits
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
-from numpy.polynomial.polynomial import Polynomial
+import pyneb as pn
+import math
+
+from astropy.io import fits
 from scipy.optimize import curve_fit
 from astropy.cosmology import Planck18 as cosmo
 
@@ -32,7 +34,8 @@ class SpectralProfiler:
         "s3_9532": 9532,
         "ne_3868": 3868,  # Ionization
         "he_4685": 4685,  # Ho star/AGN
-        "fe_5200": 5200 # Stellar population
+        "fe_5200": 5200, # Stellar population
+        "o3_4363": 4363
     }
 
     def plot_line_wavelength_vs_flux(self, file_path: str, lower_limit, upper_limit, title: str):
@@ -229,52 +232,14 @@ class SpectralProfiler:
         if "h_alpha" not in corrected or "h_beta" not in corrected:
             return
 
-        """
-        1. OXYGEN and Metallicity 
-        Calculates R23 metallicity and automatically breaks the branch degeneracy.
-        Uses [NII]/[OII] boundary at -1.2 (Kewley & Ellison 2008).
-        """
-        total_oxygen = corrected["o3_5007"] + corrected["o3_4959"] + corrected["o2_3727"]
-        # 1. Calculate standard line ratios
-        log_o_r23 = 0
-        if total_oxygen != 0 and  corrected["h_beta"] != 0:
-            log_o_r23 = np.log10(total_oxygen / corrected["h_beta"])
+        h_alpha = corrected["h_alpha"]
+        h_beta = corrected["h_beta"]
 
-        # Ionization parameter proxy
-        log_o32 = 0
-        if corrected["o2_3727"] != 0:
-            log_o32 = np.log10((corrected["o3_4959"] + corrected["o3_5007"]) / corrected["o2_3727"])
-
-        # Degeneracy breaker ratio
-        # calculate log(N/O) ratio and add a calibration offset of 0.05
-        log_no = 0
-        if corrected["o2_3727"] > 0:
-            log_no = np.log10(corrected["n2_6583"] / corrected["o2_3727"]) + log_no
-
-        # Branch selection logic (Kobulnicky & Kewley 2004)
-        if log_no < -1.2:
-            SpectralProfiler.logger.debug("Low Metallicity branch triggered for R23 calculation")
-            ratios["metallicity_r23"] = 8.0 + 0.3 * log_o_r23 - 0.25 * log_o32
-        else:
-            SpectralProfiler.logger.debug("High Metallicity branch triggered for R23 calculation")
-            # Precise KK04 Upper Branch polynomial:
-            ratios["metallicity_r23"] = 8.85 - 0.65 * log_o_r23 - 0.2 * log_o32
-
-        # compute O3N2 | metallicity_O3N2 > 8.4 = high otherwise low
-        log_o3n2 = 0
-        if corrected["h_beta"] > 0 and corrected["h_alpha"] > 0:
-            log_o3n2 = np.log10((corrected["o3_5007"] / corrected["h_beta"]) / (corrected["n2_6583"] / corrected["h_alpha"]))
-
-        # Pettini & Pagel (2004) Calibration
-        ratios["metallicity_o3n2"] = 8.73 - 0.32 * log_o3n2
-
-        # discrepancy
-        if abs(ratios["metallicity_o3n2"] - ratios["metallicity_r23"]) > 0.2:
-            SpectralProfiler.logger.warning(f"O3N2/R23 discrepancy detected: {ratios['metallicity_o3n2']:.2f} vs {ratios['metallicity_r23']:.2f}")
+        metallicity_o3n2, metallicity_r23 = self.__metallicity_empirical(corrected["o2_3727"], corrected["o3_4959"], corrected["o3_5007"], corrected["n2_6583"], h_alpha, h_beta)
 
         # weighted combined metallicity - (research + production grade)
         # interpretation -> 12 + log(O/H) = final_metallicity
-        ratios["final_metallicity"] = 0.6 * ratios["metallicity_o3n2"] + 0.4 * ratios["metallicity_r23"]
+        ratios["final_metallicity"] = 0.6 * metallicity_o3n2 + 0.4 * metallicity_r23
 
         # log(O/H) = final_metallicity - 12
         log_oh = ratios["final_metallicity"] - 12
@@ -325,9 +290,105 @@ class SpectralProfiler:
 
         return ratios
 
+    """
+    Empirical methods to based on O3N2 and R23 methods
+    Using a weight of 0.6 on O3N2, 0.4 on R23
+    """
+    def __metallicity_empirical(self, o2_3727: float, o3_4959:float, o3_5007:float, n2_6583:float, h_alpha:float, h_beta:float):
+
+        """
+        1. OXYGEN and Metallicity
+        Calculates R23 metallicity and automatically breaks the branch degeneracy.
+        Uses [NII]/[OII] boundary at -1.2 (Kewley & Ellison 2008).
+        """
+        total_oxygen = o3_5007 + o3_4959 + o2_3727
+        # 1. Calculate standard line ratios
+        log_o_r23 = 0
+        if total_oxygen != 0 and  h_beta != 0:
+            log_o_r23 = np.log10(total_oxygen / h_beta)
+
+        # Ionization parameter proxy
+        log_o32 = 0
+        if o2_3727 != 0:
+            log_o32 = np.log10((o3_4959 + o3_5007) / o2_3727)
+
+        # Degeneracy breaker ratio
+        # calculate log(N/O) ratio and add a calibration offset of 0.05
+        log_no = 0
+        if o2_3727 > 0:
+            log_no = np.log10(n2_6583 / o2_3727) + log_no
+
+        # Branch selection logic (Kobulnicky & Kewley 2004, ~7.0 to 9.3 range)
+        # Precise KK04 Upper Branch polynomial:
+        metallicity_r23 = 8.85 - 0.65 * log_o_r23 - 0.2 * log_o32
+
+        if log_no < -1.2:
+            SpectralProfiler.logger.debug("Low Metallicity branch triggered for R23 calculation")
+            metallicity_r23 = 8.0 + 0.3 * log_o_r23 - 0.25 * log_o32
+        else:
+            SpectralProfiler.logger.debug("High Metallicity branch triggered for R23 calculation")
+
+        # compute O3N2 | metallicity_O3N2 > 8.4 = high otherwise low
+        log_o3n2 = 0
+        if h_beta > 0 and h_alpha > 0:
+            log_o3n2 = np.log10((o3_5007 / h_beta) / (n2_6583 / h_alpha))
+
+        # Pettini & Pagel (2004) Calibration (~8.0 - 8.8 valid range)
+        metallicity_o3n2 = 8.73 - 0.32 * log_o3n2
+
+        # discrepancy
+        if abs(metallicity_o3n2 - metallicity_r23) > 0.2:
+            SpectralProfiler.logger.warning(f"O3N2/R23 discrepancy detected: {metallicity_o3n2:.2f} vs {metallicity_r23:.2f}")
+
+        return metallicity_o3n2, metallicity_r23
+
+
+
+    """
+    Calculate Direct Temperature Exact method pipeline using PyNeb.
+    
+    References:
+        - PyNeb Framework: Luridiana et al., 2015, A&A, 573, A42
+        - Atomic Database: Morisset et al., 2020, Atoms, 8(4), 66
+    """
+    def __metallicity_o3_4363(self, o2_3727: float, o3_4363:float, o3_5007:float, h_beta:float):
+        # Initialize the oxygen ions
+        o3 = pn.Atom('O', 3)
+        o2 = pn.Atom('O', 2)
+
+        # Normalize inputs to H-beta = 100
+        norm_4363 = (o3_4363 / h_beta) * 100
+        norm_5007 = (o3_5007 / h_beta) * 100
+        norm_3727 = (o2_3727 / h_beta) * 100
+
+        # We calculate the locked 4959 line flux to pass the full line pair ratio to PyNeb
+        norm_4959 = norm_5007 / 2.98
+
+        # Typical default electron density for star-forming regions (in cm^-3)
+        default_high_density_limit = 100.0
+
+        # 1. Solve for Temperature exactly
+        te_o3 = o3.getTemDen(int_ratio=((norm_4959 + norm_5007) / norm_4363), den=default_high_density_limit, wave1=5007, wave2=4363)
+
+        # 2. Derive low-ionization zone temperature using standard scaling law
+        t_3 = te_o3 / 10000.0
+        t_2 = 0.7 * t_3 + 0.3
+        te_o2 = t_2 * 10000.0
+
+        # 3. Calculate exact ionic abundances relative to H+
+        # PyNeb requires temperature, density, normalized flux, and line wavelength
+        o3_abundance = o3.getIonAbundance(int_ratio=norm_5007, tem=te_o3, den=default_high_density_limit, wave=5007)
+        o2_abundance  = o2. getIonAbundance(int_ratio=norm_3727, tem=te_o2,  den=default_high_density_limit, wave=3727)
+
+        # 4. Total Metallicity calculation
+        total_abundance = o3_abundance + o2_abundance
+        metallicity = 12 + int(0) + math.log10(total_abundance)
+
+        return metallicity, te_o3
+
     def corrected_emission_flux(self, file_path: str):
         hdul = fits.open(file_path)
-        target_maps = {'H_beta': 'h_beta', 'H_alpha': 'h_alpha', '[O_III] 5007': 'o3_5007', '[O_III] 4959': 'o3_4959', '[O_II] 3727': 'o2_3727', '[N_II] 6583': 'n2_6583', '[N_II] 6548': 'n2_6548', '[S_II] 6716': 's2_6716', '[S_II] 6730': 's2_6730', '[Ne_III] 3868': 'ne_3868', 'He_II 4685': 'he_4685'}
+        target_maps = {'H_beta': 'h_beta', 'H_alpha': 'h_alpha', '[O_III] 5007': 'o3_5007', '[O_III] 4959': 'o3_4959', '[O_II] 3727': 'o2_3727', '[N_II] 6583': 'n2_6583', '[N_II] 6548': 'n2_6548', '[S_II] 6716': 's2_6716', '[S_II] 6730': 's2_6730', '[Ne_III] 3868': 'ne_3868', 'He_II 4685': 'he_4685', '[O_III] 4363': 'o3_4363'}
         line_data = hdul["SPZLINE"].data
         redshift = float(hdul[2].data['Z'][0])
 
@@ -340,6 +401,10 @@ class SpectralProfiler:
         # rest of them already calculated, no need to do again. h-alpha,h-beta are calculated to detect the observed values
         wavelengths = {"h_alpha": self.lines["h_alpha"], "h_beta": self.lines["h_beta"], "fe_5200": self.lines["fe_5200"], "s2_6716": self.lines["s2_6716"],
                        "s2_6730": self.lines["s2_6730"], "s3_9069": self.lines["s3_9069"], "s3_9532": self.lines["s3_9532"]}
+
+        if "o3_4363" not in flux:
+            wavelengths["o3_4363"] = self.lines["o3_4363"]
+
         result = self.__detect_emission_flux(file_path, wavelengths)
         flux["h_alpha_observed"] = float(result["h_alpha"])
         flux["h_beta_observed"] = float(result["h_beta"])

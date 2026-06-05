@@ -6,3 +6,4 @@ astroquery
 python-dotenv
 mysql-connector-python
 boto3
+pyneb
