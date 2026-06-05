@@ -237,11 +237,13 @@ class SpectralProfiler:
         metallicity_o3n2, metallicity_r23, final_metallicity, temperature_exact = None, None, None, None
         if "o3_4363" in corrected and corrected["o3_4363"] > 0:
             final_metallicity, temperature_exact = self.__metallicity_o3_4363(corrected["o2_3727"], corrected["o3_4363"], corrected["o3_5007"], h_beta)
+            SpectralProfiler.logger.debug("Using o3_4363 branch for metallicity calculation")
         else:
             # weighted combined metallicity - (research + production grade)
             # interpretation -> 12 + log(O/H) = final_metallicity
             metallicity_o3n2, metallicity_r23 = self.__metallicity_empirical(corrected["o2_3727"], corrected["o3_4959"], corrected["o3_5007"], corrected["n2_6583"], h_alpha, h_beta)
             final_metallicity = 0.6 * metallicity_o3n2 + 0.4 * metallicity_r23
+            SpectralProfiler.logger.debug("Using o3n2 + R23 branch for metallicity calculation")
 
         ratios["metallicity_r23"] = metallicity_r23
         ratios["metallicity_o3n2"] = metallicity_o3n2

@@ -41,5 +41,6 @@ CREATE TABLE metallicity_profile (
     neon_hydrogen_ratio DOUBLE DEFAULT NULL,
     iron_strength_index DOUBLE DEFAULT NULL,
     star_form_rate DOUBLE DEFAULT NULL,
+    o3_temp_exact DOUBLE DEFAULT NULL,
     PRIMARY KEY (`obj_id`)
 );
