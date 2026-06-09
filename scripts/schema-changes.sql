@@ -26,6 +26,7 @@ CREATE TABLE galaxy_spectra_flux (
     fe_5200 DOUBLE DEFAULT NULL,
     fe_5270 DOUBLE DEFAULT NULL,
     fe_5335 DOUBLE DEFAULT NULL,
+    o3_4363_err DOUBLE DEFAULT NULL,
     PRIMARY KEY (`obj_id`)
 );
 

@@ -17,6 +17,7 @@ from astropy import coordinates as coords
 from dotenv import load_dotenv
 from libs.util.db import MySQLUtil
 from libs.spectra.sdss_extractor import SpectralProfiler
+from monitor import calculate_direct_metallicity_exact
 
 load_dotenv()
 
@@ -72,11 +73,11 @@ def populate_galaxy_spectra_flux(start_position=0, no_records=50000):
         cef, z = profiler.corrected_emission_flux(file_name)
         q = ("INSERT INTO galaxy_spectra_flux (obj_id, h_alpha, h_alpha_observed, h_beta, h_beta_observed, o3_5007, "
              "o3_4959, o3_4363, o2_3727, n2_6583, n2_6548, s2_6716, s2_6730, "
-             "s3_9069, s3_9532, ne_3868, he_4685, fe_5200, fe_5270, fe_5335) "
-             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+             "s3_9069, s3_9532, ne_3868, he_4685, fe_5200, fe_5270, fe_5335, o3_4363_err) "
+             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
         p = [id, cef["h_alpha"], cef["h_alpha_observed"], cef["h_beta"], cef["h_beta_observed"], cef["o3_5007"],
              cef["o3_4959"], cef["o3_4363"], cef["o2_3727"], cef["n2_6583"], cef["n2_6548"], cef["s2_6716"], cef["s2_6730"],
-             cef["s3_9069"], cef["s3_9532"], cef["ne_3868"], cef["he_4685"], cef["fe_5200"], cef["fe_5270"], cef["fe_5335"]]
+             cef["s3_9069"], cef["s3_9532"], cef["ne_3868"], cef["he_4685"], cef["fe_5200"], cef["fe_5270"], cef["fe_5335"], cef["o3_4363_err"]]
         db_util.execute(q, p)
 
         q = "UPDATE sdss_meta SET redshift = %s WHERE obj_id = %s"
@@ -114,6 +115,7 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
         q = "SELECT redshift FROM sdss_meta WHERE obj_id = %s"
         z, = db_util.fetch_one(q, [r['obj_id']])
         metallicity = profiler.element_abundance_profile(r, z)
+        #metallicity = calculate_direct_metallicity_exact(r['o3_4363'], r['o3_4959'], r['o3_5007'], r['o2_3727'], r['s2_6716'], r['s2_6730'], r['h_beta'])
         print(f"Metallicity for obj_id {r['obj_id']}: {metallicity}")
 
 
