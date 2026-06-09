@@ -114,8 +114,18 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
     for r in rows:
         q = "SELECT redshift FROM sdss_meta WHERE obj_id = %s"
         z, = db_util.fetch_one(q, [r['obj_id']])
-        metallicity = profiler.element_abundance_profile(r, z)
+        m = profiler.element_abundance_profile(r, z)
+        sfr = profiler.star_formation_rate(r["h_alpha_observed"], r["h_beta_observed"], z)
 
+        q = ("INSERT INTO metallicity_profile (obj_id, o3n2_metallicity, r23_metallicity, final_metallicity, final_method, oxygen_hydrogen_ratio,"
+             "nitrogen_hydrogen_ratio, carbon_hydrogen_ratio, sulphur_hydrogen_ratio, neon_hydrogen_ratio, iron_strength_index, star_form_rate, o3_temp_exact) " 
+             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+        p = [r['obj_id'], m["metallicity_o3n2"], m["metallicity_r23"], m["final_metallicity"], m["final_method"], m["oxygen"], m["nitrogen"], m["carbon"], m["sulphur"], m["neon"], m["iron_strength"], sfr, m["temperature_exact"]]
+        db_util.execute(q, p, commit=True)
+
+    db_util.close()
+    end_time = time.time()
+    logger.info(f"Processing completed in {end_time - start_time:.2f} seconds for {no_records} records")
 
 
 # now invoke
@@ -127,11 +137,3 @@ if "f" in option:
 if "m" in option:
     logger.info("Metallicity calculation is commencing")
     proximate_metallicity_profile(no_records=1)
-#id = "587722981741363294"
-#file_path = id + ".fits"
-#profiler = SpectralProfiler()
-#flux, z = profiler.corrected_emission_flux(file_path)
-
-#x = profiler.element_abundance_profile(flux)
-#x = profiler.star_formation_rate(flux['h_alpha_observed'], flux['h_beta_observed'], z)
-#print(flux[["o2_3727", "ne_3868"]])

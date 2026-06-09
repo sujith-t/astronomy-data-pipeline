@@ -35,6 +35,7 @@ CREATE TABLE metallicity_profile (
     o3n2_metallicity DOUBLE DEFAULT NULL,
     r23_metallicity DOUBLE DEFAULT NULL,
     final_metallicity DOUBLE DEFAULT NULL,
+    final_method VARCHAR(10) DEFAULT NULL,
     oxygen_hydrogen_ratio DOUBLE DEFAULT NULL,
     nitrogen_hydrogen_ratio DOUBLE DEFAULT NULL,
     carbon_hydrogen_ratio DOUBLE DEFAULT NULL,

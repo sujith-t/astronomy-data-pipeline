@@ -352,7 +352,7 @@ class SpectralProfiler:
 
         # Branch selection logic (Kobulnicky & Kewley 2004, ~7.0 to 9.3 range)
         # Precise KK04 Upper Branch polynomial:
-        metallicity_r23 = 8.85 - 0.65 * log_o_r23 - 0.2 * log_o32
+        metallicity_r23 = float(8.85 - 0.65 * log_o_r23 - 0.2 * log_o32)
 
         if log_no < -1.2:
             SpectralProfiler.logger.debug("Low Metallicity branch triggered for R23 calculation")
@@ -366,7 +366,7 @@ class SpectralProfiler:
             log_o3n2 = np.log10((o3_5007 / h_beta) / (n2_6583 / h_alpha))
 
         # Pettini & Pagel (2004) Calibration (~8.0 - 8.8 valid range)
-        metallicity_o3n2 = 8.73 - 0.32 * log_o3n2
+        metallicity_o3n2 = float(8.73 - 0.32 * log_o3n2)
 
         return metallicity_o3n2, metallicity_r23
 
@@ -417,8 +417,8 @@ class SpectralProfiler:
             te_calibrated = o3.getTemDen(int_ratio=r_o3, den=ne_calibrated, wave1=5007, wave2=4363)
             te_guess = te_calibrated
 
-        te_o3 = te_calibrated
-        ne_s2 = ne_calibrated
+        te_o3 = float(te_calibrated)
+        ne_s2 = float(ne_calibrated)
 
         # 5. Determine Low-Ionization Zone Temperature (Te_OII)
         # Using the standard research relation from Campbell, Terlevich, & Melnick (1986)
@@ -432,7 +432,7 @@ class SpectralProfiler:
 
         # 7. Total Oxygen Abundance Summation
         total_o_h = ab_o2_h + ab_o3_h
-        metallicity = 12.0 + np.log10(total_o_h)
+        metallicity = float(12.0 + np.log10(total_o_h))
 
         # metallicity and temperature exact of o3
         return metallicity, te_o3
