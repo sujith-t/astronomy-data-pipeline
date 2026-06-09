@@ -115,8 +115,7 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
         q = "SELECT redshift FROM sdss_meta WHERE obj_id = %s"
         z, = db_util.fetch_one(q, [r['obj_id']])
         metallicity = profiler.element_abundance_profile(r, z)
-        #metallicity = calculate_direct_metallicity_exact(r['o3_4363'], r['o3_4959'], r['o3_5007'], r['o2_3727'], r['s2_6716'], r['s2_6730'], r['h_beta'])
-        print(f"Metallicity for obj_id {r['obj_id']}: {metallicity}")
+
 
 
 # now invoke
@@ -136,5 +135,3 @@ if "m" in option:
 #x = profiler.element_abundance_profile(flux)
 #x = profiler.star_formation_rate(flux['h_alpha_observed'], flux['h_beta_observed'], z)
 #print(flux[["o2_3727", "ne_3868"]])
-
-# https://www.google.com/search?q=how+do+i+estimate+sulphur+in+a+galaxy+with+SDSS+DR19+dataset&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRiPAjIHCAIQIRiPAtIBCTI5NjkzajBqN6gCALACAA&sourceid=chrome&ie=UTF-8&udm=50&fbs=ADc_l-aN0CWEZBOHjofHoaMMDiKpaEWjvZ2Py1XXV8d8KvlI3sbM0Xv-BZKE_VrZb6-djVhOtEikQxVPaqfTMUjZRiWtTDeRmGZV61HbyZRtNy50cjiZ3QFCBrqF00rks-mkLZ5cyenQSeK2Ozzsqht8OSu_KYQHCBA3WlMuTfBn5oe0ikwz2bViWzFTkECg2EsGQaXbXKBDD1XwRgZ7p-ssYEfbcSQUVw&aep=10&ntc=1&mstk=AUtExfCV-aUzvKtsgXFNGl4LslJyWgTFc1FH2Q0skIEP39DgdhQ2LieMUbxLUSWvEWRXfjqDNbRmhcvT5FqsK7XqNQ-SKurq7qv05KgVsn9nLUHOGb-ZIowniexI_JOuufUwsyccse8aBVzxgAQ5wBcjENWvJJxy2BqFidMwPIeY1OX6bTH3mrvFkmSPGYYO_J0zbdH7eoMuQX4OEN7cXTfFSSNXBalgsJP5ZOMUr_7QBkPpefnxolvjjHDyOQ&aioh=3&csuir=1&cs=0&mtid=UGoVaueVE9z0juMPr5-S0AE

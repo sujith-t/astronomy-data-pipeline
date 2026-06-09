@@ -20,6 +20,11 @@ from astropy.cosmology import Planck18 as cosmo
 class SpectralProfiler:
 
     logger = logging.getLogger("__spec_profiler__")
+    METHOD_R23 = "R23"
+    METHOD_O3N2 = "O3N2"
+    METHOD_TE = "TE"
+    METHOD_O3N2_R23 = "O3N2_R23"
+
     lines = {
         "h_alpha": 6564.61,  # Hα star formation
         "h_beta": 4862.68,
@@ -226,7 +231,7 @@ class SpectralProfiler:
 
 
     # the ratio is in relation to Hydrogen as the baseline
-    def element_abundance_profile(self, corrected:dict, redshift: float=0.09):
+    def element_abundance_profile(self, corrected:dict, redshift: float=0.09) -> dict:
         ratios = {}
 
         if "h_alpha" not in corrected or "h_beta" not in corrected:
@@ -234,16 +239,31 @@ class SpectralProfiler:
 
         h_alpha = corrected["h_alpha"]
         h_beta = corrected["h_beta"]
+
+        # Calculate Signal-to-Noise Ratio (SNR)
+        snr_4363 = corrected['o3_4363'] / corrected['o3_4363_err'] if ((corrected['o3_4363'] is not None and corrected['o3_4363'] > 0) and (corrected['o3_4363_err'] is not None and corrected['o3_4363_err'] > 0)) else 0
+
+        # Standard peer-reviewed threshold is usually SNR > 3 or SNR > 5
+        use_empirical = True if (corrected['o3_4363'] <= 1.5 or snr_4363 < 3.0) else False
         metallicity_o3n2, metallicity_r23, final_metallicity, temperature_exact = None, None, None, None
-        if "o3_4363" in corrected and corrected["o3_4363"] > 0:
+
+        ratios["final_method"] = SpectralProfiler.METHOD_O3N2_R23
+        if not use_empirical:
             final_metallicity, temperature_exact = self.__direct_metallicity_exact(corrected['o3_4363'], corrected['o3_4959'], corrected['o3_5007'], corrected['o2_3727'], corrected['s2_6716'], corrected['s2_6730'], h_beta)
             SpectralProfiler.logger.debug("Using o3_4363 branch for metallicity calculation")
+            ratios["final_method"] = SpectralProfiler.METHOD_TE
         else:
             # weighted combined metallicity - (research + production grade)
             # interpretation -> 12 + log(O/H) = final_metallicity
             metallicity_o3n2, metallicity_r23 = self.__metallicity_empirical(corrected["o2_3727"], corrected["o3_4959"], corrected["o3_5007"], corrected["n2_6583"], h_alpha, h_beta)
             final_metallicity = 0.6 * metallicity_o3n2 + 0.4 * metallicity_r23
             SpectralProfiler.logger.debug("Using o3n2 + R23 branch for metallicity calculation")
+
+            # In case of discrepancy we consider o3n2 is reliable
+            if abs(metallicity_o3n2 - metallicity_r23) > 0.3:
+                final_metallicity = metallicity_o3n2
+                ratios["final_method"] = SpectralProfiler.METHOD_O3N2
+                SpectralProfiler.logger.warning(f"O3N2/R23 discrepancy detected: {metallicity_o3n2:.2f} vs {metallicity_r23:.2f}")
 
         ratios["metallicity_r23"] = metallicity_r23
         ratios["metallicity_o3n2"] = metallicity_o3n2
@@ -347,10 +367,6 @@ class SpectralProfiler:
 
         # Pettini & Pagel (2004) Calibration (~8.0 - 8.8 valid range)
         metallicity_o3n2 = 8.73 - 0.32 * log_o3n2
-
-        # discrepancy
-        if abs(metallicity_o3n2 - metallicity_r23) > 0.2:
-            SpectralProfiler.logger.warning(f"O3N2/R23 discrepancy detected: {metallicity_o3n2:.2f} vs {metallicity_r23:.2f}")
 
         return metallicity_o3n2, metallicity_r23
 
