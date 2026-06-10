@@ -35,7 +35,7 @@ def populate_galaxy_spectra_flux(start_position=0, no_records=50000):
     db_util = MySQLUtil(os)
     profiler = SpectralProfiler()
 
-    q = "SELECT obj_id, ra, declination FROM galaxy_catalog WHERE plate_id IS NULL LIMIT %s, %s"
+    q = "SELECT obj_id, ra, declination FROM galaxy_catalog WHERE plate_id IS NULL AND taxanomy_id = 15 LIMIT %s, %s"
     rows = db_util.fetch_all(q, [start_position, no_records])
 
     # download
@@ -125,6 +125,7 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
     for r in rows:
         q = "SELECT redshift FROM sdss_meta WHERE obj_id = %s"
         z, = db_util.fetch_one(q, [r['obj_id']])
+        logger.debug(f"Metallicity calculation starts for obj_id {r['obj_id']}")
         m = profiler.element_abundance_profile(r, z)
         sfr = profiler.star_formation_rate(r["h_alpha_observed"], r["h_beta_observed"], z)
 
@@ -143,7 +144,7 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
 option = os.getenv("EXEC_LEVEL").lower()
 if "f" in option:
     logger.info("Starting to populate spectroscopic data")
-    populate_galaxy_spectra_flux(no_records=1)
+    populate_galaxy_spectra_flux(no_records=20)
 
 if "m" in option:
     logger.info("Metallicity calculation is commencing")

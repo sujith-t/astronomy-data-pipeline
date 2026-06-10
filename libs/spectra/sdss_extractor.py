@@ -311,7 +311,7 @@ class SpectralProfiler:
 
         ##### 5. estimate NEON #####
         log_neo =  0.7
-        if corrected["o3_5007"] != 0 or corrected["o3_4959"]:
+        if (corrected["o3_5007"] > 0 or corrected["o3_4959"] > 0) and corrected["ne_3868"] > 0:
             log_neo = np.log10(corrected["ne_3868"] / (corrected["o3_5007"] + corrected["o3_4959"])) + log_neo
 
         log_neh = log_neo + log_oh
@@ -337,7 +337,7 @@ class SpectralProfiler:
         total_oxygen = o3_5007 + o3_4959 + o2_3727
         # 1. Calculate standard line ratios
         log_o_r23 = 0
-        if total_oxygen != 0 and  h_beta != 0:
+        if total_oxygen > 0 and  h_beta > 0:
             log_o_r23 = np.log10(total_oxygen / h_beta)
 
         # Ionization parameter proxy
