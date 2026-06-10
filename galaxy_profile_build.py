@@ -17,11 +17,11 @@ from astropy import coordinates as coords
 from dotenv import load_dotenv
 from libs.util.db import MySQLUtil
 from libs.spectra.sdss_extractor import SpectralProfiler
-from monitor import calculate_direct_metallicity_exact
 
 load_dotenv()
 
-logging.basicConfig(level=os.getenv("LOG_LEVEL"), format="%(asctime)s \t %(name)s \t %(levelname)s \t %(message)s")
+logging.basicConfig(level=os.getenv("LOG_LEVEL"),
+                    format="%(asctime)s \t %(name)s \t %(levelname)s \t %(message)s", filename='astro-pipeline.log', datefmt='%Y-%m-%d %H:%M:%S')
 
 # initializing the logging in the main script
 logger = logging.getLogger(__name__)
@@ -44,18 +44,29 @@ def populate_galaxy_spectra_flux(start_position=0, no_records=50000):
         logger.info(f"Processing galaxy {id} at position ({ra}, {dec})")
 
         # Query spectroscopy (DR19)
-        spec = SDSS.query_region(pos, radius=2*u.arcsec, spectro=True, data_release=19)
+        wanted_fields = ['plate', 'mjd', 'fiberID', 'class']
+        spec = SDSS.query_region(pos, radius=2*u.arcsec, spectro=True, data_release=19, specobj_fields=wanted_fields)
+
         if spec is None:
             q = "UPDATE galaxy_catalog SET plate_id = %s WHERE obj_id = %s"
             p = [-1, id]
             db_util.execute(q, p, commit=True)
-            logger.debug(f"Couldn't find the matching plate_id, mjd and fiber_id for galaxy {id}")
+            logger.debug(f"No matches found with RA:{ra} and DEC:{dec} for galaxy {id}")
+            return
+
+        galaxy_objs = spec[spec['class'] == 'GALAXY']
+        if len(galaxy_objs) == 0:
+            q = "UPDATE galaxy_catalog SET plate_id = %s WHERE obj_id = %s"
+            p = [-2, id]
+            db_util.execute(q, p, commit=True)
+            logger.debug(f"Please verify the RA:{ra} and DEC:{dec} for galaxy {id} unable to locate the object")
             return
 
         file_name = id + ".fits"
         try:
             # Download FITS file
-            sp = SDSS.get_spectra(matches=spec)
+            sp = SDSS.get_spectra(plate=galaxy_objs['plate'][0], mjd=galaxy_objs['mjd'][0],
+                    fiberID=galaxy_objs['fiberID'][0], data_release=19)
             sp[0].writeto(file_name, overwrite=True)
         except Exception as e:
             logger.error(f"Failed to download FITS file for galaxy {id}: {e}")
