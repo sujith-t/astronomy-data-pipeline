@@ -443,17 +443,22 @@ class SpectralProfiler:
         line_data = hdul["SPZLINE"].data
         redshift = float(hdul[2].data['Z'][0])
 
-        flux = {"o3_4363_err": None}
-        for r in line_data:
-            if r['LINENAME'].strip() in target_maps:
-                flux[target_maps[r['LINENAME'].strip()]] = float(r['LINEAREA'])
-            if r['LINENAME'].strip() == "[O_III] 4363":
-                flux["o3_4363_err"] = float(r['LINEAREA_ERR'])
-
         # this step is done due to unavailability of iron in SPZLINE (not already calculated)
         # rest of them already calculated, no need to do again. h-alpha,h-beta are calculated to detect the observed values
         wavelengths = {"h_alpha": self.lines["h_alpha"], "h_beta": self.lines["h_beta"], "fe_5200": self.lines["fe_5200"], "s2_6716": self.lines["s2_6716"],
                        "s2_6730": self.lines["s2_6730"], "s3_9069": self.lines["s3_9069"], "s3_9532": self.lines["s3_9532"]}
+
+        flux: dict[str, float|None] = {"o3_4363_err": None}
+        for r in line_data:
+            if r['LINENAME'].strip() in target_maps:
+                l, v = target_maps[r['LINENAME'].strip()], float(r['LINEAREA'])
+                if v > 0:
+                    flux[l] = v
+                else:
+                    # this path is to trigger manual flux detection than direct retrieval
+                    wavelengths[l] = self.lines[l]
+            if r['LINENAME'].strip() == "[O_III] 4363":
+                flux["o3_4363_err"] = float(r['LINEAREA_ERR'])
 
         if "o3_4363" not in flux:
             wavelengths["o3_4363"] = self.lines["o3_4363"]
