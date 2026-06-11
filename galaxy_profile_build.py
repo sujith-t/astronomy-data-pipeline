@@ -129,10 +129,15 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
         m = profiler.element_abundance_profile(r, z)
         sfr = profiler.star_formation_rate(r["h_alpha_observed"], r["h_beta_observed"], z)
 
+        # factor denotes the element ratio against 10^6 hydrogen atoms
+        factor = 10 ** 6
+        oxygen, nitrogen, carbon, sulphur, neon = (m["oxygen"] * factor, m["nitrogen"] * factor, m["carbon"] * factor,
+                                                   m["sulphur"] * factor, m["neon"] * factor)
+
         q = ("INSERT INTO metallicity_profile (obj_id, o3n2_metallicity, r23_metallicity, final_metallicity, final_method, oxygen_hydrogen_ratio,"
              "nitrogen_hydrogen_ratio, carbon_hydrogen_ratio, sulphur_hydrogen_ratio, neon_hydrogen_ratio, iron_strength_index, star_form_rate, o3_temp_exact) " 
              "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
-        p = [r['obj_id'], m["metallicity_o3n2"], m["metallicity_r23"], m["final_metallicity"], m["final_method"], m["oxygen"], m["nitrogen"], m["carbon"], m["sulphur"], m["neon"], m["iron_strength"], sfr, m["temperature_exact"]]
+        p = [r['obj_id'], m["metallicity_o3n2"], m["metallicity_r23"], m["final_metallicity"], m["final_method"], oxygen, nitrogen, carbon, sulphur, neon, m["iron_strength"], sfr, m["temperature_exact"]]
         db_util.execute(q, p, commit=True)
 
     db_util.close()
