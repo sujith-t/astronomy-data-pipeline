@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 import pyneb as pn
-import math
 
 from astropy.io import fits
 from scipy.optimize import curve_fit
@@ -134,6 +133,11 @@ class SpectralProfiler:
             window_mask = (rest_wavelength >= start) & (rest_wavelength <= end)
             continuum_mask = continuum_mask | window_mask
 
+        # Clean negative values at the noisy blue edge (< 3900 Å)
+        edge_condition = (rest_wavelength < 3900) & (flux < 0)
+        ivar[edge_condition] = 0.0
+        flux[edge_condition] = 0.0
+
         # Exclude bad/flagged data points
         valid_continuum_mask = continuum_mask & (ivar > 0)
 
@@ -171,24 +175,33 @@ class SpectralProfiler:
     # Chabrier, G. (2003), "Galactic Stellar and Substellar Initial Mass Function," Publications of the Astronomical Society of the Pacific, vol. 115, no. 809, pp. 763–795
     def star_formation_rate(self, h_alpha:float, h_beta:float, redshift:float) -> float:
 
-        if h_alpha == 0 or h_beta == 0:
+        if (h_alpha < 0 < h_beta) or (h_beta < 0 < h_alpha) or (h_alpha == 0 or h_beta == 0):
             return 0
+
+        # 1. Clean up invalid/negative input values from noisy data
+        #h_alpha = np.where(h_alpha > 0, h_alpha, np.nan)
+        #h_beta = np.where(h_beta > 0, h_beta, np.nan)
 
         intrinsic_ratio = 2.86
 
-        a_ha = 0.0
+        # Calculate Extinction (CCM 1989 Reddening Curve)
+        # Protection against unphysical ratios less than 2.86 (due to noise)
         observed_ratio = h_alpha / h_beta
-        if observed_ratio > 2.86:
-            ebv = 1.97 * np.log10(observed_ratio / intrinsic_ratio)
-            a_ha = 3.33 * ebv
+        ebv = np.where(observed_ratio > intrinsic_ratio, 1.97 * np.log10(observed_ratio / intrinsic_ratio),0.0)
+        a_ha = 3.33 * ebv
 
-        # Convert redshift → distance Luminosity distance in cm
+        # Apply scale factor for SDSS 10^-17 standard units
+        scale_factor = 1e-17
+        f_ha_corr = h_alpha * (10**(0.4 * a_ha)) * scale_factor
+
+        # Convert redshift to Luminosity Distance (cm)
         luminosity_distance = cosmo.luminosity_distance(redshift).to('cm').value
 
-        f_ha_corr = h_alpha * (10**(0.4 * a_ha)) * 1e-17
-
+        # Calculate H-alpha Luminosity (erg / s)
         l_ha = 4 * np.pi * (luminosity_distance**2) * f_ha_corr
 
+        # Convert to Star Formation Rate (Kennicutt 1998 calibration)
+        # Assumes a Salpeter Initial Mass Function (IMF)
         return 7.9e-42 * l_ha
 
 
@@ -276,7 +289,7 @@ class SpectralProfiler:
 
         ##### 2. NITROGEN #####
         log_no = 0
-        if corrected["o2_3727"] > 0:
+        if (corrected["n2_6583"] > 0 and corrected["o2_3727"] > 0) or (corrected["n2_6583"] < 0 and corrected["o2_3727"] < 0):
             log_no = np.log10(corrected["n2_6583"] / corrected["o2_3727"]) + log_no
 
         # log(N/H) = log(N/O)+log(O/H)
@@ -296,7 +309,10 @@ class SpectralProfiler:
         if redshift < 0.09:
             # widely adopted empirical polynomial from Díaz et al
             # 12 + log10(S/H) = 5.79 + (1.54 x log10(S23)) + (0.15 x log10(S23)^2)
-            s23 = (corrected["s2_6716"] + corrected["s2_6730"] + corrected["s3_9069"] + corrected["s3_9532"]) / h_beta
+            s23 = 1
+            total_s = corrected["s2_6716"] + corrected["s2_6730"] + corrected["s3_9069"] + corrected["s3_9532"]
+            if (total_s < 0 and h_beta < 0) or (total_s > 0 and h_beta > 0):
+                s23 = total_s / h_beta
             log_sh = 5.79 + (1.54 * np.log10(s23)) + (0.15 * np.log10(s23) ** 2) - 12
             ratios["sulphur"] = 10 ** log_sh
             SpectralProfiler.logger.debug("Full S23 Calculation")
@@ -342,12 +358,12 @@ class SpectralProfiler:
 
         # Ionization parameter proxy
         log_o32 = 0
-        if o2_3727 != 0:
+        if (((o3_4959 + o3_5007) > 0 ) and o2_3727 > 0) or (((o3_4959 + o3_5007) < 0 ) and o2_3727 < 0):
             log_o32 = np.log10((o3_4959 + o3_5007) / o2_3727)
 
         # Degeneracy breaker ratio
         log_no = 0
-        if o2_3727 > 0:
+        if (n2_6583 > 0 and o2_3727 > 0) or (n2_6583 < 0 and o2_3727 < 0):
             log_no = np.log10(n2_6583 / o2_3727) + log_no
 
         # Branch selection logic (Kobulnicky & Kewley 2004, ~7.0 to 9.3 range)
@@ -362,7 +378,7 @@ class SpectralProfiler:
 
         # compute O3N2 | metallicity_O3N2 > 8.4 = high otherwise low
         log_o3n2 = 0
-        if h_beta > 0 and h_alpha > 0:
+        if ((o3_5007 > 0 and h_beta > 0) or (o3_5007 < 0 and h_beta < 0)) and ((h_alpha > 0 and n2_6583 > 0) or (h_alpha < 0 and n2_6583 < 0)):
             log_o3n2 = np.log10((o3_5007 / h_beta) / (n2_6583 / h_alpha))
 
         # Pettini & Pagel (2004) Calibration (~8.0 - 8.8 valid range)
