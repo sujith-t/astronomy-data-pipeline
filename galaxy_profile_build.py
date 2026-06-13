@@ -127,8 +127,13 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
         q = "SELECT redshift FROM sdss_meta WHERE obj_id = %s"
         z, = db_util.fetch_one(q, [r['obj_id']])
         logger.debug(f"Metallicity calculation starts for obj_id {r['obj_id']}")
+
+        h_alpha, h_beta = r["h_alpha"], r["h_beta"]
+        if r['h_alpha'] == 0 or r["h_beta"] == 0:
+            h_alpha, h_beta = r["h_alpha_observed"], r["h_beta_observed"]
+
         m = profiler.element_abundance_profile(r, z)
-        sfr = profiler.star_formation_rate(r["h_alpha"], r["h_beta"], z)
+        sfr = profiler.star_formation_rate(h_alpha, h_beta, z)
 
         # factor denotes the element ratio against 10^6 hydrogen atoms
         factor = 10 ** 6
