@@ -35,7 +35,7 @@ def populate_galaxy_spectra_flux(start_position=0, no_records=50000):
     db_util = MySQLUtil(os)
     profiler = SpectralProfiler()
 
-    q = "SELECT obj_id, ra, declination FROM galaxy_catalog WHERE plate_id IS NULL AND taxanomy_id = 7 LIMIT %s, %s"
+    q = "SELECT obj_id, ra, declination FROM galaxy_catalog WHERE plate_id IS NULL LIMIT %s, %s"
     rows = db_util.fetch_all(q, [start_position, no_records])
 
     # download
@@ -63,14 +63,9 @@ def populate_galaxy_spectra_flux(start_position=0, no_records=50000):
             return
 
         file_name = id + ".fits"
-        try:
-            # Download FITS file
-            sp = SDSS.get_spectra(plate=galaxy_objs['plate'][0], mjd=galaxy_objs['mjd'][0],
-                    fiberID=galaxy_objs['fiberID'][0], data_release=19)
-            sp[0].writeto(file_name, overwrite=True)
-        except Exception as e:
-            logger.error(f"Failed to download FITS file for galaxy {id}: {e}")
-            return
+        sp = SDSS.get_spectra(plate=galaxy_objs['plate'][0], mjd=galaxy_objs['mjd'][0],
+                              fiberID=galaxy_objs['fiberID'][0], data_release=19)
+        sp[0].writeto(file_name, overwrite=True)
 
         return spec
 
@@ -103,12 +98,18 @@ def populate_galaxy_spectra_flux(start_position=0, no_records=50000):
 
     # main execution controlled here
     for obj_id, obj_ra, obj_dec in rows:
-        spectra = __download_spec_file__(obj_id, obj_ra, obj_dec)
+        try:
+            # Download FITS file
+            spectra = __download_spec_file__(obj_id, obj_ra, obj_dec)
 
-        if spectra is None:
+            if spectra is None:
+                continue
+
+            __extract_save_flux__(obj_id, spectra)
+        except Exception as e:
+            logger.error(f"Failed to download and process FITS file for galaxy {id}: {e}")
+            time.sleep(60)
             continue
-
-        __extract_save_flux__(obj_id, spectra)
 
     db_util.close()
     end_time = time.time()
@@ -153,10 +154,13 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
 
 # now invoke
 option = os.getenv("EXEC_LEVEL").lower()
-if "f" in option:
-    logger.info("Starting to populate spectroscopic data")
-    populate_galaxy_spectra_flux(no_records=20)
+while True:
+    if "f" in option:
+        logger.info("Starting to populate spectroscopic data")
+        populate_galaxy_spectra_flux(no_records=10, start_position=1)
 
-if "m" in option:
-    logger.info("Metallicity calculation is commencing")
-    proximate_metallicity_profile(no_records=10000)
+    if "m" in option:
+        logger.info("Metallicity calculation is commencing")
+        proximate_metallicity_profile(no_records=10000)
+
+    time.sleep(60)
