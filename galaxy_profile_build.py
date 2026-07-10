@@ -26,9 +26,11 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL"),
 # initializing the logging in the main script
 logger = logging.getLogger(__name__)
 
-if os.getenv("EXEC_ENABLED") != "1":
-    logger.warning("Execution halted. To enable set 1 in .env")
-    exit()
+def _stop_execution_when_flagged():
+    load_dotenv(override=True)
+    if os.getenv("EXEC_ENABLED") != "1":
+        logger.warning("Execution halted. To enable set 1 in .env")
+        exit()
 
 def populate_galaxy_spectra_flux(start_position=0, no_records=50000):
     start_time = time.time()
@@ -153,14 +155,17 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
 
 
 # now invoke
+_stop_execution_when_flagged()
+
 option = os.getenv("EXEC_LEVEL").lower()
 while True:
     if "f" in option:
         logger.info("Starting to populate spectroscopic data")
-        populate_galaxy_spectra_flux(no_records=10, start_position=1)
+        populate_galaxy_spectra_flux(no_records=20, start_position=1)
 
     if "m" in option:
         logger.info("Metallicity calculation is commencing")
         proximate_metallicity_profile(no_records=10000)
 
+    _stop_execution_when_flagged()
     time.sleep(60)
