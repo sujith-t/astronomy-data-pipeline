@@ -10,6 +10,7 @@ import os
 import astropy.units as u
 import logging
 import time
+import sys
 
 from astroquery.sdss import SDSS
 from astropy import coordinates as coords
@@ -156,12 +157,20 @@ def proximate_metallicity_profile(start_position=0, no_records=50000):
 
 # now invoke
 _stop_execution_when_flagged()
+n_records = 20
+n_start = 0
+if len(sys.argv) == 2 and sys.argv[1].isnumeric():
+    n_records = int(sys.argv[1])
+
+if len(sys.argv) == 3 and sys.argv[2].isnumeric():
+    n_records = int(sys.argv[1])
+    n_start = int(sys.argv[2])
 
 option = os.getenv("EXEC_LEVEL").lower()
 while True:
     if "f" in option:
         logger.info("Starting to populate spectroscopic data")
-        populate_galaxy_spectra_flux(no_records=20, start_position=1)
+        populate_galaxy_spectra_flux(no_records=n_records, start_position=n_start)
 
     if "m" in option:
         logger.info("Metallicity calculation is commencing")
