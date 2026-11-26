@@ -2,6 +2,7 @@
 
 The purpose of the pipeline is to extract important spectral lines from galaxies to determine element abundance against hydrogen and also to estimate metallicity profile by identifying emission and absorption lines from galaxies
 
+## Description
 Upon execution it queries the SDSS DR19 and fetches plate, mjd, fiber id so that it can identify relevant FITS file, download locally and continue processing. Following are the important activities taking place:
 1. Galaxy information is fetched from a local database in a batch with the user specified batch-size and offset in a commandline parameter
 2. Using the RA, DEC stored in local DB; plate, mjd, fiber id are fetched from SDSS DR 19 query
@@ -40,7 +41,16 @@ Upon execution it queries the SDSS DR19 and fetches plate, mjd, fiber id so that
 - *__direct_metallicity_exact (Private)* Utilizes PyNeb to run an iterative numerical solver across a 5-level quantum atom model. It solves the physical feedback loop between gas electron density (*n<sub>e</sub>*) and electron temperature (*T<sub>e</sub>*) using physical atomic ratios (S<sub>2</sub>) and (O<sub>3</sub>) lines to yield an exact, non-empirical chemical profile. Gold standard of chemical calculation in nebular, providing accurate physical measurements instead of statistical guesses
 - *corrected_emission_flux()* It opens a target FITS file, reads the pre-calculated emission line catalog (SPZLINE), extracts all target atomic elements, fills in missing features (like Iron or uncalculated weak lines) by scanning the raw spectrum data via private sub-methods, and returns a fully corrected, organized baseline dataset ready for profiling. Simply cleaning unstructured raw file inputs into pristine datasets
 
-### References and Initial Dataset
+## 🛠️ Tech Stack
+
+| Technology | Purpose |
+| :--- | :--- |
+| **Python** | The main pipeline for data extraction, save and metallicity calculation |
+| **Bash** | Run the pipeline in Linux commandline |
+| **MySQL** | Primary relational database where galaxy data initially populated. See references |
+
+
+## References and Initial Dataset
 **S. Thillayampalam**, *"Morphological Characteristics of Galaxies in Studying Galaxy Evolution via Optimising Classification,"* 2025 IEEE International Conference on Future Machine Learning and Data Science (FMLDS), Los Angeles, CA, USA, 2025, pp. 460-466, doi: 10.1109/FMLDS67896.2025.00088.
 
 
